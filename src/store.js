@@ -1,0 +1,332 @@
+// Shared in-memory state. Every role (Student, Guard, Admin) reads and writes this
+// one object, so a change in one app shows up live in the others.
+// Each action below receives a draft (a fresh clone) and mutates it.
+import { createContext, useContext } from 'react';
+import {
+  ALERT_TYPES, CP, ESCALATE_MS, MIN, ROUTES, STUDENT, cpShort, distM, fmtTime, randInt,
+} from './data.js';
+
+export const AppCtx = createContext(null);
+export const useApp = () => useContext(AppCtx);
+
+export function vibrate(pattern = [180, 80, 180]) {
+  try { navigator.vibrate && navigator.vibrate(pattern); } catch (e) { /* not supported */ }
+}
+
+export function toast(d, role, msg, kind = 'info') {
+  d.toasts.push({ id: ++d.seq, role, msg, kind, until: Date.now() + 3600 });
+  if (d.toasts.length > 14) d.toasts.shift();
+}
+
+export function audit(d, who, action, reason, cat = 'footage') {
+  d.audit.unshift({ id: 'au' + ++d.seq, who, action, reason, cat, time: Date.now() });
+}
+
+export const guardById = (d, id) => d.guards.find((g) => g.id === id);
+export const nearestGuard = (d, cpId) => [...d.guards].sort((a, b) => distM(a, CP[cpId]) - distM(b, CP[cpId]))[0];
+
+export function createAlert(d, { type, cp, detail, photo = null, walk = false, assign = null }) {
+  const g = assign ? guardById(d, assign) : nearestGuard(d, cp);
+  const a = {
+    id: 'AL-' + ++d.seq, type, cp, detail, photo, walk,
+    time: Date.now(), status: 'new', escalated: false,
+    assigned: g.id, acceptedBy: null, lights: false, speaker: false, resolvedBy: null, note: null,
+  };
+  d.alerts.unshift(a);
+  toast(d, 'guard', `${ALERT_TYPES[type].label} · ${CP[cp].name}`, 'alert');
+  if (ALERT_TYPES[type].pri !== 'medium') toast(d, 'admin', `New ${ALERT_TYPES[type].label.toLowerCase()} alert at ${CP[cp].name}`, 'alert');
+  return a;
+}
+
+const findAlert = (d, id) => d.alerts.find((a) => a.id === id);
+
+// ---------- timers (run every second) ----------
+export function tick(d) {
+  const now = Date.now();
+  d.toasts = d.toasts.filter((t) => t.until > now);
+
+  const esc = d.alerts.filter((a) => a.status === 'new' && !a.escalated && now - a.time >= ESCALATE_MS);
+  for (const a of esc) { a.escalated = true; a.escalatedAt = now; }
+  if (esc.length) {
+    const what = esc.length === 1 ? esc[0].id : `${esc.length} alerts`;
+    toast(d, 'guard', `${what} not accepted in 2 min. Escalated to Security Head`, 'warn');
+    toast(d, 'admin', `${what} escalated to Security Head`, 'warn');
+  }
+
+  const w = d.walk;
+  if (w && w.phase === 'active' && w.missing) {
+    if (w.missing.stage === 'countdown' && now >= w.missing.until) {
+      w.missing = { stage: 'prompt', until: now + 30 * 1000 };
+      vibrate([300, 120, 300, 120, 300]);
+    } else if (w.missing.stage === 'prompt' && now >= w.missing.until) {
+      raiseMissed(d);
+    }
+  }
+
+  if (now - d.lastDrift > 5000) {
+    d.lastDrift = now;
+    d.inside = Math.max(900, d.inside + randInt(-2, 3));
+    if (Math.random() < 0.6) d.entriesToday += randInt(1, 3);
+  }
+}
+
+// ---------- student: gate ----------
+export function gateScan(d, dir) {
+  const now = Date.now();
+  d.gate.dir = dir;
+  d.gate.log.unshift({ id: 'g' + ++d.seq, dir, place: 'Main Gate', time: now });
+  if (dir === 'IN') { d.inside += 1; d.entriesToday += 1; } else d.inside -= 1;
+}
+
+// ---------- student: Saathi Walk ----------
+export const lastPassed = (w) => [...w.steps].reverse().find((s) => s.status === 'passed');
+export const nextStep = (w) => w.steps.find((s) => s.status !== 'passed');
+
+export function startWalk(d, destKey, sharing) {
+  const r = ROUTES[destKey];
+  const now = Date.now();
+  d.walk = {
+    id: 'W-' + ++d.seq,
+    dest: destKey,
+    guard: r.guard,
+    startedAt: now,
+    phase: 'active',
+    sharing: !!sharing,
+    link: `kavach.app/w/${(d.seq * 7919).toString(36)}${STUDENT.id.slice(-3)}`,
+    steps: r.steps.map((s, i) => ({ ...s, status: i === 0 ? 'passed' : 'pending', time: i === 0 ? now : null })),
+    missing: null,
+    followerAt: null,
+    followerAlert: null,
+    sosAlert: null,
+    missedAlert: null,
+  };
+  const g = guardById(d, r.guard);
+  toast(d, 'student', `Photo captured at checkpoint A · ${fmtTime(now)}`, 'success');
+  toast(d, 'guard', `Saathi Walk started: Priya S. → ${r.dest} (watching: ${g.name})`, 'info');
+}
+
+export function passNext(d) {
+  const w = d.walk;
+  const step = nextStep(w);
+  if (!step) return;
+  const now = Date.now();
+  step.status = 'passed';
+  step.time = now;
+  w.missing = null;
+  if (w.missedAlert) {
+    const a = findAlert(d, w.missedAlert);
+    if (a && a.status !== 'resolved') {
+      a.status = 'resolved'; a.resolvedAt = now; a.resolvedBy = 'system';
+      a.note = `Priya passed ${cpShort(step.cp)} at ${fmtTime(now)}. Auto-closed.`;
+      toast(d, 'guard', `${a.id} auto-closed: Priya passed ${cpShort(step.cp)}`, 'success');
+    }
+    w.missedAlert = null;
+  }
+  if (step === w.steps[w.steps.length - 1]) arrive(d);
+  else toast(d, 'student', `Passed ${cpShort(step.cp)} · photo captured`, 'success');
+}
+
+function arrive(d) {
+  const w = d.walk;
+  const now = Date.now();
+  w.phase = 'arrived';
+  w.arrivedAt = now;
+  d.walksCompleted += 1;
+  d.monthly.walks += 1;
+  for (const a of d.alerts) {
+    if (a.walk && a.status !== 'resolved' && [w.sosAlert, w.followerAlert].includes(a.id)) {
+      a.status = 'resolved'; a.resolvedAt = now; a.resolvedBy = 'system'; a.note = 'Student reached safely.';
+    }
+  }
+  const photos = w.steps.length;
+  audit(d, 'System', `Auto-deleted ${photos} Saathi Walk photos (${w.id})`, `Priya reached ${ROUTES[w.dest].dest} safely`, 'system');
+  toast(d, 'guard', `Priya S. reached ${ROUTES[w.dest].dest} safely ✓`, 'success');
+}
+
+export function goMissing(d) {
+  d.walk.missing = { stage: 'countdown', until: Date.now() + 5000 };
+}
+
+export function raiseMissed(d) {
+  const w = d.walk;
+  const last = lastPassed(w);
+  const next = nextStep(w);
+  next.status = 'missed';
+  const a = createAlert(d, {
+    type: 'missed',
+    cp: last.cp,
+    detail: `Missed checkpoint ${cpShort(next.cp)}. Last seen at ${cpShort(last.cp)}, ${fmtTime(last.time)}. Saathi Walk: Priya Sharma → ${ROUTES[w.dest].dest}. No answer to "Are you OK?"`,
+    photo: { cp: last.cp, time: last.time },
+    walk: true,
+    assign: w.guard,
+  });
+  w.missing = { stage: 'alerted' };
+  w.missedAlert = a.id;
+  toast(d, 'student', `Guard ${guardById(d, w.guard).name} has been alerted`, 'warn');
+}
+
+export function answerOk(d) {
+  const w = d.walk;
+  w.missing = null;
+  toast(d, 'student', 'Glad you are OK. Your walk continues.', 'success');
+}
+
+export function sos(d) {
+  const w = d.walk;
+  const last = lastPassed(w);
+  w.missing = null;
+  const a = createAlert(d, {
+    type: 'sos',
+    cp: last.cp,
+    detail: `SOS from Priya Sharma (Saathi Walk → ${ROUTES[w.dest].dest}). Last checkpoint ${cpShort(last.cp)}, ${fmtTime(last.time)}.`,
+    photo: { cp: last.cp, time: last.time },
+    walk: true,
+    assign: w.guard,
+  });
+  w.sosAlert = a.id;
+  toast(d, 'student', `SOS sent. Guard ${guardById(d, w.guard).name} notified.`, 'alert');
+  vibrate([400, 100, 400]);
+}
+
+export function cancelSos(d) {
+  const w = d.walk;
+  const a = findAlert(d, w.sosAlert);
+  if (a && a.status !== 'resolved') {
+    a.status = 'resolved'; a.resolvedAt = Date.now(); a.resolvedBy = 'student'; a.note = 'Cancelled by student: "I am safe now".';
+    toast(d, 'guard', `${a.id} cancelled by student (safe)`, 'success');
+  }
+  w.sosAlert = null;
+  toast(d, 'student', 'SOS cancelled. Stay safe!', 'info');
+}
+
+export function follower(d) {
+  const w = d.walk;
+  const last = lastPassed(w);
+  const g = guardById(d, w.guard);
+  const a = createAlert(d, {
+    type: 'follower',
+    cp: last.cp,
+    detail: `Same unidentified person behind Priya S. for 3 checkpoints (anonymous track, faces blurred). Last at ${cpShort(last.cp)}.`,
+    walk: true,
+    assign: w.guard,
+  });
+  w.followerAt = Date.now();
+  w.followerAlert = a.id;
+  d.monthly.followers += 1;
+  vibrate([120, 60, 120, 60, 120]);
+  toast(d, 'student', `Guard ${g.name} notified discreetly`, 'warn');
+}
+
+// ---------- guard ----------
+export function acceptAlert(d, id, guardId) {
+  const a = findAlert(d, id);
+  const g = guardById(d, guardId);
+  const cp = CP[a.cp];
+  a.status = 'accepted';
+  a.acceptedBy = guardId;
+  a.acceptedAt = Date.now();
+  a.dist = distM(g, cp);
+  a.from = { x: g.x, y: g.y };
+  g.x = cp.x - 12;
+  g.y = cp.y + 12;
+  toast(d, 'guard', `Navigating to ${cp.name} · ${a.dist} m · ~${Math.max(1, Math.ceil(a.dist / 80))} min`, 'info');
+  if (a.walk) toast(d, 'student', `Guard ${g.name} accepted and is on the way`, 'success');
+}
+
+export function toggleLights(d, id) {
+  const a = findAlert(d, id);
+  a.lights = !a.lights;
+  toast(d, 'guard', `Area lights ${a.lights ? 'ON' : 'OFF'} · ${CP[a.cp].name}`, a.lights ? 'success' : 'info');
+  if (a.walk && a.lights) toast(d, 'student', 'Lights near you were turned on', 'info');
+}
+
+export function playSpeaker(d, id) {
+  const a = findAlert(d, id);
+  a.speaker = true;
+  a.speakerAt = Date.now();
+  toast(d, 'guard', `Speaker warning played at ${CP[a.cp].name}`, 'info');
+}
+
+export function resolveAlert(d, id, guardId) {
+  const a = findAlert(d, id);
+  a.status = 'resolved';
+  a.resolvedAt = Date.now();
+  a.resolvedBy = guardId;
+  if (!a.acceptedBy) a.acceptedBy = guardId;
+  const g = guardById(d, guardId);
+  toast(d, 'guard', `${a.id} resolved by ${g.name}`, 'success');
+  toast(d, 'admin', `${a.id} resolved by ${g.name}`, 'success');
+  if (a.walk) toast(d, 'student', `Guard ${g.name} marked your alert resolved`, 'success');
+}
+
+export function skipTime(d, ms = 2 * MIN) {
+  for (const a of d.alerts) if (a.status === 'new') a.time -= ms;
+}
+
+// ---------- triggers ----------
+export const TRIGGERS = {
+  wall: (d) => createAlert(d, { type: 'wall', cp: 'WALL', detail: 'Person climbing over the east boundary wall. Thermal camera W-3.' }),
+  tailgate: (d) => createAlert(d, { type: 'tailgate', cp: 'GATE', detail: 'Two people passed on one scan at Lane 2. Second person not verified.' }),
+  tamper: (d) => createAlert(d, { type: 'tamper', cp: 'C', detail: 'Camera C-2 covered or moved. View blocked for 20 s.' }),
+};
+
+// Cross-module rule: RFID instrument crossing the lab door is checked against the issue ledger.
+export function equipmentLeaving(d, itemId = 'osc4') {
+  const it = d.inventory.find((i) => i.id === itemId);
+  if (it.holder) {
+    toast(d, 'guard', `${it.name} passed lab door. Issued to ${it.holder}. Allowed ✓`, 'success');
+    toast(d, 'admin', `${it.name} left lab: issued to ${it.holder}. No alert`, 'success');
+    toast(d, 'student', `${it.name} checked out on your account at lab door`, 'info');
+    return false;
+  }
+  createAlert(d, { type: 'lab', cp: 'LAB', detail: `${it.name} (RFID ${it.rfid}) passed the lab door without being issued.` });
+  createAlert(d, { type: 'lab', cp: 'GATE', detail: `Hold at gate: ${it.name} (RFID ${it.rfid}) left Electronics Lab without issue. Check bags at exit.` });
+  toast(d, 'admin', 'Cross-module rule fired: lab door + Main Gate alerted', 'warn');
+  return true;
+}
+
+export function visitorWrongZone(d) {
+  const v = d.visitors.find((x) => x.status !== 'left') || null;
+  const who = v ? `${v.name} (pass ${v.id})` : 'Visitor';
+  createAlert(d, {
+    type: 'visitor',
+    cp: 'D',
+    detail: `${who} seen near Girls Hostel D. Allowed zone: ${v ? v.dest : 'Admin Block'}. Pass ${v ? v.from + '–' + v.to : ''}.`,
+  });
+  toast(d, 'admin', 'Visitor outside allowed zone. Guard alerted.', 'warn');
+}
+
+// ---------- lab ----------
+export function issueItems(d, picks) {
+  const lines = [];
+  for (const [id, q] of Object.entries(picks)) {
+    if (!q) continue;
+    const it = d.inventory.find((x) => x.id === id);
+    it.stock -= q;
+    if (it.rfid) it.holder = STUDENT.id;
+    d.issued.unshift({ id: 'IS-' + ++d.seq, itemId: id, name: it.name, qty: q, time: Date.now(), status: 'issued', rfid: !!it.rfid });
+    lines.push(`${q} × ${it.name}`);
+  }
+  toast(d, 'student', `Issued to you: ${lines.join(', ')}`, 'success');
+  toast(d, 'admin', `Lab issue → Priya S.: ${lines.join(', ')}`, 'info');
+}
+
+export function returnItem(d, issueId, missing) {
+  const is = d.issued.find((x) => x.id === issueId);
+  const it = d.inventory.find((x) => x.id === is.itemId);
+  is.status = missing ? 'short' : 'returned';
+  is.missing = missing;
+  is.returnedAt = Date.now();
+  it.stock += is.qty - missing;
+  if (it.rfid) it.holder = null;
+  if (is.qty > 1) d.returnCount += 1;
+  if (missing) toast(d, 'admin', `Short return: ${missing} ${it.short} missing (Priya S.)`, 'warn');
+  toast(d, 'student', missing ? `Returned with ${missing} ${it.short} reported missing` : `Returned: ${is.qty} × ${is.name} ✓`, missing ? 'warn' : 'success');
+}
+
+export function raiseDispute(d, label, reason) {
+  d.disputes.unshift({ id: 'DS-' + ++d.seq, label, reason, time: Date.now(), status: 'open' });
+  audit(d, `Priya Sharma (${STUDENT.id})`, `Raised dispute · ${label}`, reason, 'lookup');
+  toast(d, 'student', 'Dispute sent to Lab In-charge and student committee', 'success');
+  toast(d, 'admin', `New dispute from ${STUDENT.id}: ${label}`, 'info');
+}

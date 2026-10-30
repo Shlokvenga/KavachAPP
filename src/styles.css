@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: #eef2f9;
+  color: #0f172a;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+}
+button { -webkit-user-select: none; user-select: none; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid #F59E0B; outline-offset: 2px;
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+.desk-bg {
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(30, 58, 138, .16), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgba(245, 158, 11, .14), transparent 60%),
+    #eef2f9;
+}
+
+/* ---------- motion ---------- */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.fade-up { animation: fadeUp .28s ease-out both; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.fade-in { animation: fadeIn .2s ease-out both; }
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: none; } }
+.sheet { animation: slideUp .3s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes pop { 0% { transform: scale(.4); opacity: 0; } 70% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
+.pop { animation: pop .45s ease-out both; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(-12px) scale(.97); } to { opacity: 1; transform: none; } }
+.toast-in { animation: toastIn .3s cubic-bezier(.2, .8, .2, 1) both; }
+
+@keyframes pulseRing { 0% { transform: scale(.7); opacity: .85; } 100% { transform: scale(2.6); opacity: 0; } }
+.pulse-ring { transform-box: fill-box; transform-origin: center; animation: pulseRing 1.6s ease-out infinite; }
+.pulse-ring-html { animation: pulseRing 1.8s ease-out infinite; }
+@keyframes pulseSoft { 0% { transform: scale(1); opacity: .6; } 100% { transform: scale(1.45); opacity: 0; } }
+.pulse-soft { animation: pulseSoft 1.8s ease-out infinite; }
+
+@keyframes scanline { 0% { top: 6%; } 50% { top: 90%; } 100% { top: 6%; } }
+.scanline {
+  position: absolute; left: 8%; right: 8%; height: 3px; border-radius: 3px;
+  background: linear-gradient(90deg, transparent, #F59E0B, transparent);
+  box-shadow: 0 0 14px 2px rgba(245, 158, 11, .8);
+  animation: scanline 1.7s ease-in-out infinite;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+.shake { animation: shake .7s ease-in-out 3; }
+
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+.blink { animation: blink 1.2s ease-in-out infinite; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin .8s linear infinite; }
+
+@keyframes dash { to { stroke-dashoffset: -24; } }
+.route-dash { animation: dash 1s linear infinite; }
+
+@keyframes fill { from { clip-path: inset(100% 0 0 0); } to { clip-path: inset(0 0 0 0); } }
+.fp-fill { animation: fill 1.3s ease-in-out both; }
+
+@keyframes grow { from { width: 0; } }
+.grow { animation: grow .7s ease-out both; }
+
+@keyframes progress { from { width: 0; } to { width: 100%; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area { position: fixed; inset: 0; padding: 24px; background: #fff; }
+}
