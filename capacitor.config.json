@@ -1,0 +1,11 @@
+{
+  "appId": "com.kavach.campus",
+  "appName": "Kavach",
+  "webDir": "www",
+  "backgroundColor": "#6B170D",
+  "android": {
+    "backgroundColor": "#6B170D",
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": true
+  }
+}

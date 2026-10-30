@@ -3,7 +3,7 @@
 // Each action below receives a draft (a fresh clone) and mutates it.
 import { createContext, useContext } from 'react';
 import {
-  ALERT_TYPES, CP, ESCALATE_MS, MIN, ROUTES, STUDENT, cpShort, distM, fmtTime, randInt,
+  ALERT_TYPES, CP, ESCALATE_MS, MIN, ROUTES, STUDENT, camById, camsAt, cpShort, distM, fmtTime, randInt,
 } from './data.js';
 
 export const AppCtx = createContext(null);
@@ -25,10 +25,10 @@ export function audit(d, who, action, reason, cat = 'footage') {
 export const guardById = (d, id) => d.guards.find((g) => g.id === id);
 export const nearestGuard = (d, cpId) => [...d.guards].sort((a, b) => distM(a, CP[cpId]) - distM(b, CP[cpId]))[0];
 
-export function createAlert(d, { type, cp, detail, photo = null, walk = false, assign = null }) {
+export function createAlert(d, { type, cp, detail, photo = null, walk = false, assign = null, cam = null }) {
   const g = assign ? guardById(d, assign) : nearestGuard(d, cp);
   const a = {
-    id: 'AL-' + ++d.seq, type, cp, detail, photo, walk,
+    id: 'AL-' + ++d.seq, type, cp, detail, photo, walk, cam: cam || camsAt(cp)[0] || null,
     time: Date.now(), status: 'new', escalated: false,
     assigned: g.id, acceptedBy: null, lights: false, speaker: false, resolvedBy: null, note: null,
   };
@@ -65,6 +65,7 @@ export function tick(d) {
 
   if (now - d.lastDrift > 5000) {
     d.lastDrift = now;
+    d.camEvents += randInt(0, 4);
     d.inside = Math.max(900, d.inside + randInt(-2, 3));
     if (Math.random() < 0.6) d.entriesToday += randInt(1, 3);
   }
@@ -156,7 +157,7 @@ export function raiseMissed(d) {
     type: 'missed',
     cp: last.cp,
     detail: `Missed checkpoint ${cpShort(next.cp)}. Last seen at ${cpShort(last.cp)}, ${fmtTime(last.time)}. Saathi Walk: Priya Sharma → ${ROUTES[w.dest].dest}. No answer to "Are you OK?"`,
-    photo: { cp: last.cp, time: last.time },
+    photo: { cp: last.cp, time: last.time, cam: camsAt(last.cp)[0] },
     walk: true,
     assign: w.guard,
   });
@@ -178,8 +179,8 @@ export function sos(d) {
   const a = createAlert(d, {
     type: 'sos',
     cp: last.cp,
-    detail: `SOS from Priya Sharma (Saathi Walk → ${ROUTES[w.dest].dest}). Last checkpoint ${cpShort(last.cp)}, ${fmtTime(last.time)}.`,
-    photo: { cp: last.cp, time: last.time },
+    detail: `SOS from Priya Sharma (Saathi Walk → ${ROUTES[w.dest].dest}). Last checkpoint ${cpShort(last.cp)}, ${fmtTime(last.time)}. Nearby cameras switched to live.`,
+    photo: { cp: last.cp, time: last.time, cam: camsAt(last.cp)[0] },
     walk: true,
     assign: w.guard,
   });
@@ -227,8 +228,8 @@ export function acceptAlert(d, id, guardId) {
   a.acceptedAt = Date.now();
   a.dist = distM(g, cp);
   a.from = { x: g.x, y: g.y };
-  g.x = cp.x - 12;
-  g.y = cp.y + 12;
+  g.x = cp.x - 10;
+  g.y = cp.y - 10;
   toast(d, 'guard', `Navigating to ${cp.name} · ${a.dist} m · ~${Math.max(1, Math.ceil(a.dist / 80))} min`, 'info');
   if (a.walk) toast(d, 'student', `Guard ${g.name} accepted and is on the way`, 'success');
 }
@@ -253,6 +254,11 @@ export function resolveAlert(d, id, guardId) {
   a.resolvedAt = Date.now();
   a.resolvedBy = guardId;
   if (!a.acceptedBy) a.acceptedBy = guardId;
+  if ((a.type === 'tamper' || a.type === 'camoffline') && a.cam && d.cams[a.cam]) {
+    d.cams[a.cam].status = 'online';
+    d.cams[a.cam].since = Date.now();
+    a.note = a.note || `${a.cam} checked and back online.`;
+  }
   const g = guardById(d, guardId);
   toast(d, 'guard', `${a.id} resolved by ${g.name}`, 'success');
   toast(d, 'admin', `${a.id} resolved by ${g.name}`, 'success');
@@ -264,11 +270,63 @@ export function skipTime(d, ms = 2 * MIN) {
 }
 
 // ---------- triggers ----------
+function setCam(d, id, status) {
+  d.cams[id].status = status;
+  d.cams[id].since = Date.now();
+}
+
 export const TRIGGERS = {
-  wall: (d) => createAlert(d, { type: 'wall', cp: 'WALL', detail: 'Person climbing over the east boundary wall. Thermal camera W-3.' }),
-  tailgate: (d) => createAlert(d, { type: 'tailgate', cp: 'GATE', detail: 'Two people passed on one scan at Lane 2. Second person not verified.' }),
-  tamper: (d) => createAlert(d, { type: 'tamper', cp: 'C', detail: 'Camera C-2 covered or moved. View blocked for 20 s.' }),
+  wall: (d) => createAlert(d, { type: 'wall', cp: 'WALL', cam: 'CAM-W1', detail: 'Person climbing over the east boundary wall. Thermal camera CAM-W1.' }),
+  tailgate: (d) => createAlert(d, { type: 'tailgate', cp: 'GATE', cam: 'CAM-G2', detail: 'Two people passed on one scan at Lane 2. Second person not verified.' }),
+  tamper: (d) => {
+    setCam(d, 'CAM-C2', 'tampered');
+    createAlert(d, { type: 'tamper', cp: 'C', cam: 'CAM-C2', detail: 'CAM-C2 covered or moved. View blocked for 20 s.' });
+  },
+  camoffline: (d) => {
+    setCam(d, 'CAM-W2', 'offline');
+    createAlert(d, { type: 'camoffline', cp: 'WALL', cam: 'CAM-W2', detail: 'CAM-W2 (east wall, thermal) stopped sending video. Power or network fault.' });
+    toast(d, 'admin', 'CAM-W2 went offline. East wall coverage reduced.', 'warn');
+  },
 };
+
+// ---------- CCTV ----------
+export function viewFeed(d, camId, who, reason = 'Live monitoring (on duty)') {
+  audit(d, who, `Viewed live feed ${camId} · ${camById(camId).name}`, reason);
+}
+
+export function camPtz(d, camId, change) {
+  const c = d.cams[camId];
+  if (change.zoom) c.zoom = Math.min(3, Math.max(1, +(c.zoom + change.zoom).toFixed(1)));
+  if (change.pan) c.pan = Math.max(-40, Math.min(40, c.pan + change.pan));
+  if (change.reset) { c.zoom = 1; c.pan = 0; }
+}
+
+export function snapshot(d, camId, who) {
+  audit(d, who, `Saved snapshot from ${camId}`, 'Evidence for incident log (faces stay blurred)');
+  toast(d, 'guard', `Snapshot saved from ${camId}. Faces stay blurred.`, 'success');
+}
+
+export function talkDown(d, camId) {
+  toast(d, 'guard', `Speaker at ${camById(camId).name}: "You are being recorded. Security is on the way."`, 'info');
+}
+
+export function flagIncident(d, camId, guardId) {
+  const cam = camById(camId);
+  const g = guardById(d, guardId);
+  createAlert(d, { type: 'flagged', cp: cam.cp, cam: camId, assign: guardId, detail: `Flagged by Guard ${g.name} while watching ${camId} (${cam.name}).` });
+}
+
+export function requestUnblur(d, camId, who, reason) {
+  audit(d, who, `Requested unblur · ${camId}`, `${reason}. Sent to student committee for review`);
+  toast(d, 'guard', 'Unblur request sent to the student committee', 'info');
+  toast(d, 'admin', `Unblur request for ${camId} awaiting committee review`, 'warn');
+}
+
+export function reportDarkSpot(d, cp) {
+  d.darkSpots.unshift({ id: 'DK-' + ++d.seq, cp, time: Date.now() });
+  toast(d, 'student', 'Thanks! Reported to campus maintenance.', 'success');
+  toast(d, 'admin', `Student reported a dark spot / camera issue near ${CP[cp].name}`, 'info');
+}
 
 // Cross-module rule: RFID instrument crossing the lab door is checked against the issue ledger.
 export function equipmentLeaving(d, itemId = 'osc4') {
@@ -279,8 +337,8 @@ export function equipmentLeaving(d, itemId = 'osc4') {
     toast(d, 'student', `${it.name} checked out on your account at lab door`, 'info');
     return false;
   }
-  createAlert(d, { type: 'lab', cp: 'LAB', detail: `${it.name} (RFID ${it.rfid}) passed the lab door without being issued.` });
-  createAlert(d, { type: 'lab', cp: 'GATE', detail: `Hold at gate: ${it.name} (RFID ${it.rfid}) left Electronics Lab without issue. Check bags at exit.` });
+  createAlert(d, { type: 'lab', cp: 'LAB', cam: 'CAM-L1', detail: `${it.name} (RFID ${it.rfid}) passed the lab door without being issued. CAM-L1 clip attached.` });
+  createAlert(d, { type: 'lab', cp: 'GATE', cam: 'CAM-G1', detail: `Hold at gate: ${it.name} (RFID ${it.rfid}) left the ECE lab without issue. Check bags at exit.` });
   toast(d, 'admin', 'Cross-module rule fired: lab door + Main Gate alerted', 'warn');
   return true;
 }
@@ -291,7 +349,8 @@ export function visitorWrongZone(d) {
   createAlert(d, {
     type: 'visitor',
     cp: 'D',
-    detail: `${who} seen near Girls Hostel D. Allowed zone: ${v ? v.dest : 'Admin Block'}. Pass ${v ? v.from + '–' + v.to : ''}.`,
+    cam: 'CAM-D2',
+    detail: `${who} seen near the Girls Hostel by CAM-D2. Allowed zone: ${v ? v.dest : 'Main Building'}. Pass ${v ? v.from + '–' + v.to : ''}.`,
   });
   toast(d, 'admin', 'Visitor outside allowed zone. Guard alerted.', 'warn');
 }

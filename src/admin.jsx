@@ -1,46 +1,53 @@
 // Admin dashboard: overview, visitor passes, lab inventory, alert heatmap, audit log.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ALERT_TYPES, COLLEGE, CP, PRI, QR_PERIOD, VISITOR_PURPOSES, VISITOR_ZONES, cls, fmtDay, fmtTime, pad, qrCode, ago } from './data.js';
 import { audit, equipmentLeaving, toast, useApp, visitorWrongZone } from './store.js';
-import CampusMap from './map.jsx';
+import { CAMERAS } from './campus.js';
+import { CAM_STATUS, CameraFeed, CameraViewer } from './cctv.jsx';
+import { CommandCentre, LayerChips, Twin, heatFor, twinData } from './twinview.jsx';
 import { Badge, BottomNav, Btn, Card, DemoPanel, Icon, LiveDot, QR, Ring, SectionTitle, Sheet, useFastNow } from './ui.jsx';
 
 export default function AdminApp() {
   const { s } = useApp();
   const [tab, setTab] = useState('overview');
+  const [cam, setCam] = useState(null);
+  const [cc, setCc] = useState(false);
   const open = s.alerts.filter((a) => a.status !== 'resolved').length;
   const low = s.inventory.filter((i) => i.kind === 'consumable' && i.stock < i.min).length;
   return (
     <>
-      <div className="shrink-0 bg-navy px-4 pb-3 pt-3 text-white">
+      <div className="shrink-0 bg-brand px-4 pb-3 pt-3 text-white">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs font-medium text-blue-200">{COLLEGE}</div>
-            <div className="text-lg font-bold">Admin dashboard</div>
+            <div className="text-xs font-medium text-white/65">{COLLEGE}</div>
+            <div className="font-serif text-xl font-semibold">Admin dashboard</div>
           </div>
           <Badge className="bg-white/10 text-white"><LiveDot />Live</Badge>
         </div>
       </div>
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto" key={tab}>
-        {tab === 'overview' && <Overview go={setTab} />}
+        {tab === 'overview' && <Overview go={setTab} openCam={setCam} openCc={() => setCc(true)} />}
+        {tab === 'twin' && !cc && <TwinTab openCam={setCam} openCc={() => setCc(true)} />}
+        {tab === 'twin' && cc && <div className="p-6 text-center text-sm text-slate-500">Command centre is open.</div>}
         {tab === 'visitors' && <Visitors />}
         {tab === 'stock' && <Inventory />}
-        {tab === 'heat' && <Heatmap />}
         {tab === 'audit' && <Audit />}
       </div>
+      {cam && <CameraViewer key={cam} camId={cam} onClose={() => setCam(null)} who="Admin (Ms. Kulkarni)" />}
+      {cc && <CommandCentre onClose={() => setCc(false)} />}
       <BottomNav value={tab} onChange={setTab} items={[
         { id: 'overview', label: 'Overview', icon: 'chart', badge: open },
+        { id: 'twin', label: 'Twin', icon: 'map' },
         { id: 'visitors', label: 'Visitors', icon: 'badge' },
         { id: 'stock', label: 'Lab stock', icon: 'box', badge: low },
-        { id: 'heat', label: 'Heatmap', icon: 'flame' },
         { id: 'audit', label: 'Audit', icon: 'eye' },
       ]} />
     </>
   );
 }
 
-function Stat({ icon, label, value, tone = 'navy', sub, onClick }) {
-  const tones = { navy: 'bg-blue-100 text-navy', red: 'bg-red-100 text-red-600', amber: 'bg-amber-100 text-amber-700', green: 'bg-emerald-100 text-emerald-700', violet: 'bg-violet-100 text-violet-700' };
+function Stat({ icon, label, value, tone = 'brand', sub, onClick }) {
+  const tones = { brand: 'bg-brand-100 text-brand', red: 'bg-red-100 text-red-600', amber: 'bg-amber-100 text-amber-700', green: 'bg-emerald-100 text-emerald-700', violet: 'bg-violet-100 text-violet-700' };
   return (
     <button type="button" onClick={onClick} className="rounded-2xl bg-white p-3.5 text-left shadow-sm ring-1 ring-slate-200/70 transition hover:shadow-md">
       <span className={cls('grid h-9 w-9 place-items-center rounded-xl', tones[tone])}><Icon name={icon} className="h-5 w-5" /></span>
@@ -51,8 +58,11 @@ function Stat({ icon, label, value, tone = 'navy', sub, onClick }) {
   );
 }
 
-function Overview({ go }) {
+function Overview({ go, openCam, openCc }) {
   const { s, mutate, now } = useApp();
+  const counts = { online: 0, offline: 0, tampered: 0 };
+  for (const c of Object.values(s.cams)) counts[c.status] += 1;
+  const issues = CAMERAS.filter((c) => s.cams[c.id].status !== 'online');
   const open = s.alerts.filter((a) => a.status !== 'resolved');
   const walks = s.otherWalks.length + (s.walk && s.walk.phase === 'active' ? 1 : 0);
   const issued = 37 + s.issued.filter((i) => i.status === 'issued').reduce((a, b) => a + b.qty, 0);
@@ -69,6 +79,40 @@ function Overview({ go }) {
         <Stat icon="badge" label="Visitors on campus" value={visitors} onClick={() => go('visitors')} />
       </div>
 
+      <button type="button" onClick={openCc} className="flex w-full items-center gap-4 rounded-3xl bg-gradient-to-br from-brand to-[#3D0D08] p-4 text-left text-white shadow-md active:scale-[.99]">
+        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-white/10"><Icon name="map" className="h-6 w-6 text-accent" /></span>
+        <span className="flex-1">
+          <span className="block font-serif text-lg font-semibold">Open command centre</span>
+          <span className="block text-sm text-white/75">3D digital twin, camera wall and live alerts, full screen</span>
+        </span>
+        <Icon name="chevR" />
+      </button>
+
+      <Card>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2"><Icon name="video" className="h-5 w-5 text-brand" /><h3 className="font-bold text-slate-900">CCTV health</h3></div>
+          <Badge className="bg-emerald-100 text-emerald-700"><LiveDot />{counts.online}/{CAMERAS.length} live</Badge>
+        </div>
+        <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+          {[[counts.offline, 'Offline', 'text-slate-600'], [counts.tampered, 'Tampered', 'text-amber-600'], [s.camEvents.toLocaleString('en-IN'), 'AI events today', 'text-slate-900'], [s.darkSpots.length, 'Student reports', 'text-brand']].map(([v, k, c]) => (
+            <div key={k} className="rounded-xl bg-ivory px-1 py-2"><div className={cls('text-lg font-extrabold', c)}>{v}</div><div className="text-[10px] leading-tight text-slate-500">{k}</div></div>
+          ))}
+        </div>
+        {issues.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {issues.map((c) => (
+              <button key={c.id} type="button" onClick={() => openCam(c.id)} className="flex w-full items-center gap-3 rounded-xl bg-amber-50 p-2 text-left ring-1 ring-amber-200">
+                <div className="w-20 shrink-0"><CameraFeed camId={c.id} showMeta={false} detections={false} className="rounded-lg" /></div>
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-900">{c.id} · {c.name}</span><span className="block text-xs text-slate-500">{CAM_STATUS[s.cams[c.id].status].label} since {fmtTime(s.cams[c.id].since)}</span></span>
+                <Icon name="chevR" className="h-4 w-4 text-slate-400" />
+              </button>
+            ))}
+          </div>
+        )}
+        {s.darkSpots.length > 0 && <p className="mt-2 text-xs text-slate-500">Latest student report: dark spot near {CP[s.darkSpots[0].cp].name}, {fmtTime(s.darkSpots[0].time)}.</p>}
+        <p className="mt-2 text-[11px] text-slate-400">Video kept 7 days, faces blurred, no face search. Every view is in the audit log.</p>
+      </Card>
+
       <div>
         <SectionTitle right={<span className="text-xs text-slate-400">auto-updating</span>}>Live alerts</SectionTitle>
         <Card className="divide-y divide-slate-100 p-0">
@@ -80,7 +124,7 @@ function Overview({ go }) {
                 <div className="truncate text-sm font-semibold text-slate-900">{ALERT_TYPES[a.type].label}</div>
                 <div className="text-xs text-slate-500">{CP[a.cp].name} · {ago(a.time, now)}</div>
               </div>
-              {a.escalated ? <Badge className="bg-amber-100 text-amber-800">Escalated</Badge> : a.status === 'accepted' ? <Badge className="bg-blue-100 text-navy">Accepted</Badge> : <Badge className="bg-red-600 text-white">New</Badge>}
+              {a.escalated ? <Badge className="bg-amber-100 text-amber-800">Escalated</Badge> : a.status === 'accepted' ? <Badge className="bg-brand-100 text-brand">Accepted</Badge> : <Badge className="bg-red-600 text-white">New</Badge>}
             </div>
           ))}
         </Card>
@@ -111,7 +155,7 @@ function Visitors() {
   const { s, mutate, now } = useApp();
   const t = new Date(now);
   const hhmm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  const blank = { name: '', phone: '', purpose: 'Meeting', dest: 'Admin Block', from: hhmm(t), to: hhmm(new Date(now + 2 * 3600 * 1000)) };
+  const blank = { name: '', phone: '', purpose: 'Meeting', dest: 'Main Building', from: hhmm(t), to: hhmm(new Date(now + 2 * 3600 * 1000)) };
   const [f, setF] = useState(blank);
   const [show, setShow] = useState(null);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -127,7 +171,7 @@ function Visitors() {
     setShow(id);
     setF(blank);
   };
-  const input = 'mt-1 w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm ring-1 ring-slate-200 focus:ring-2 focus:ring-navy';
+  const input = 'mt-1 w-full rounded-xl border-0 bg-slate-50 px-3 py-2.5 text-sm ring-1 ring-slate-200 focus:ring-2 focus:ring-brand';
   const visitor = show && s.visitors.find((v) => v.id === show);
   const active = s.visitors.filter((v) => v.status !== 'left');
   return (
@@ -160,7 +204,7 @@ function Visitors() {
           {active.map((v) => (
             <Card key={v.id} className="fade-up p-3">
               <div className="flex items-center gap-3">
-                <span className="grid h-10 w-10 place-items-center rounded-full bg-blue-100 font-bold text-navy">{v.name[0]}</span>
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-brand-100 font-bold text-brand">{v.name[0]}</span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold text-slate-900">{v.name} <span className="font-normal text-slate-400">· {v.id}</span></div>
                   <div className="text-xs text-slate-500">{v.purpose} · {v.dest} · {v.from}–{v.to}</div>
@@ -189,11 +233,11 @@ function VisitorPass({ v, onClose }) {
   return (
     <Sheet title="Visitor pass" onClose={onClose}>
       <div className="flex flex-col items-center">
-        <div className="w-full rounded-2xl bg-gradient-to-r from-navy to-navy-light p-4 text-white">
-          <div className="text-xs text-blue-200">Temporary pass · {v.id}</div>
+        <div className="w-full rounded-2xl bg-gradient-to-r from-brand to-[#3D0D08] p-4 text-white">
+          <div className="text-xs text-white/65">Temporary pass · {v.id}</div>
           <div className="text-lg font-bold">{v.name}</div>
-          <div className="text-sm text-blue-100">{v.purpose} · {v.dest}</div>
-          <div className="mt-1 text-xs text-blue-200">Valid today {v.from} to {v.to} · Allowed zone: {v.dest}</div>
+          <div className="text-sm text-white/80">{v.purpose} · {v.dest}</div>
+          <div className="mt-1 text-xs text-white/65">Valid today {v.from} to {v.to} · Allowed zone: {v.dest}</div>
         </div>
         <div className="mt-4 rounded-2xl p-2 ring-1 ring-slate-200"><QR key={slot} text={qrCode(v.id, slot)} size={180} fade /></div>
         <div className="mt-3 flex items-center gap-2 text-sm text-slate-600">
@@ -241,7 +285,7 @@ function Inventory() {
                   </td>
                   <td className="px-2 py-3 text-right font-bold tabular-nums text-slate-900">{i.rfid ? (i.holder ? 0 : 1) : i.stock}</td>
                   <td className="px-4 py-3 text-right">
-                    {i.rfid ? (i.holder ? <Badge className="bg-blue-100 text-navy">Issued · {i.holder}</Badge> : <Badge className="bg-emerald-100 text-emerald-700">In lab</Badge>)
+                    {i.rfid ? (i.holder ? <Badge className="bg-brand-100 text-brand">Issued · {i.holder}</Badge> : <Badge className="bg-emerald-100 text-emerald-700">In lab</Badge>)
                       : isLow ? <Badge className="bg-amber-200 text-amber-900">Low</Badge> : <Badge className="bg-emerald-100 text-emerald-700">OK</Badge>}
                   </td>
                 </tr>
@@ -271,7 +315,7 @@ function StockReport({ onClose }) {
     <Sheet title="Stock verification report" onClose={onClose} tall>
       <div className="print-area">
         <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
-          <div className="flex items-center gap-2"><Icon name="file" className="h-5 w-5 text-navy" /><span className="font-bold text-slate-900">LabLedger · Yearly stock verification</span></div>
+          <div className="flex items-center gap-2"><Icon name="file" className="h-5 w-5 text-brand" /><span className="font-bold text-slate-900">LabLedger · Yearly stock verification</span></div>
           <div className="mt-1 text-xs text-slate-500">Electronics Lab · {COLLEGE} · AY {ay}</div>
           <div className="text-xs text-slate-500">Generated {fmtDay(now, now)} {new Date(now).toLocaleDateString('en-IN')}, {fmtTime(now)} by Kavach</div>
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
@@ -307,26 +351,48 @@ function StockReport({ onClose }) {
   );
 }
 
-// ---------------- Heatmap ----------------
-function Heatmap() {
+// ---------------- Digital twin + heatmap ----------------
+function TwinTab({ openCam, openCc }) {
   const { s } = useApp();
-  const heat = { ...s.heatBase };
+  const [layers, setLayers] = useState({ cams: true, alerts: true, heat: true, guards: true, walk: true, labels: false });
+  const [sel, setSel] = useState(null);
+  const api = useRef(null);
+  const heat = heatFor(s);
   const live = {};
-  for (const a of s.alerts) if (!a.seed) { heat[a.cp] = (heat[a.cp] || 0) + 1; live[a.cp] = (live[a.cp] || 0) + 1; }
+  for (const a of s.alerts) if (!a.seed) live[a.cp] = (live[a.cp] || 0) + 1;
   const ranked = Object.entries(heat).sort((a, b) => b[1] - a[1]);
   const max = ranked[0][1];
   const top = { GATE: 'Tailgating', WALL: 'Wall crossing', B: 'Follower', D: 'Visitor zone', C: 'Camera tamper', LAB: 'Equipment exit', A: 'Loitering', ADMIN: 'Visitor zone' };
+  const selCam = sel && sel.startsWith('cam:') ? sel.slice(4) : null;
+  const onPick = (id) => {
+    setSel(id);
+    if (id && api.current) api.current.flyTo(id.startsWith('alert:') ? 'cp:' + (s.alerts.find((a) => 'alert:' + a.id === id) || {}).cp : id);
+  };
   return (
     <div className="space-y-4 p-4 pb-8">
-      <Card className="p-2">
-        <CampusMap heat={heat} showGuards={false} />
-        <div className="flex items-center justify-between px-2 pb-1 pt-2 text-[11px] text-slate-500">
-          <span>Last 30 days + live</span>
-          <span className="flex items-center gap-1">Fewer <span className="h-2 w-16 rounded-full bg-gradient-to-r from-red-100 to-red-600" /> More</span>
+      <Card className="overflow-hidden p-0">
+        <div className="relative h-[330px]">
+          <Twin data={twinData(s, layers, sel)} onPick={onPick} apiRef={api} className="absolute inset-0" />
+          <div className="absolute left-2 right-2 top-2"><LayerChips layers={layers} setLayers={setLayers} dark /></div>
+          <div className="absolute bottom-2 right-2 flex gap-1.5">
+            {[['overview', 'Reset'], ['top', 'Top']].map(([k, l]) => (
+              <button key={k} type="button" onClick={() => api.current && api.current.view(k)} className="rounded-full bg-black/55 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/15">{l}</button>
+            ))}
+            <button type="button" onClick={openCc} aria-label="Full screen" className="grid h-7 w-7 place-items-center rounded-full bg-accent text-slate-900"><Icon name="columns" className="h-3.5 w-3.5" /></button>
+          </div>
         </div>
+        {selCam ? (
+          <div className="flex items-center gap-3 p-3">
+            <div className="w-28 shrink-0"><CameraFeed camId={selCam} detections={false} showMeta={false} /></div>
+            <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold text-slate-900">{selCam}</div><div className="text-xs text-slate-500">{CAM_STATUS[s.cams[selCam].status].label}</div></div>
+            <Btn size="sm" icon="video" onClick={() => openCam(selCam)}>Open</Btn>
+          </div>
+        ) : (
+          <div className="px-3 py-2.5 text-xs text-slate-500">Drag to rotate, pinch to zoom. Tap a camera to see its feed. Campus layout is approximate.</div>
+        )}
       </Card>
       <div>
-        <SectionTitle>Zones by alerts</SectionTitle>
+        <SectionTitle>Alert heatmap by zone</SectionTitle>
         <Card className="space-y-3">
           {ranked.map(([id, n]) => (
             <div key={id}>
@@ -334,15 +400,15 @@ function Heatmap() {
                 <span className="font-semibold text-slate-900">{CP[id].name}</span>
                 <span className="tabular-nums text-slate-600"><b className="text-slate-900">{n}</b>{live[id] ? <span className="ml-1 text-xs font-semibold text-red-600">+{live[id]} today</span> : null}</span>
               </div>
-              <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100"><div className="grow h-full rounded-full bg-gradient-to-r from-amber-400 to-red-600" style={{ width: `${(n / max) * 100}%` }} /></div>
-              <div className="mt-0.5 text-[11px] text-slate-500">Mostly: {top[id]}</div>
+              <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100"><div className="grow h-full rounded-full bg-gradient-to-r from-accent to-klered" style={{ width: `${(n / max) * 100}%` }} /></div>
+              <div className="mt-0.5 text-[11px] text-slate-500">Mostly: {top[id]} · last 30 days + live</div>
             </div>
           ))}
         </Card>
       </div>
-      <Card className="flex items-start gap-3 bg-blue-50 ring-blue-100">
-        <Icon name="bulb" className="mt-0.5 h-5 w-5 text-navy" />
-        <p className="text-sm text-slate-700"><b>Suggestion:</b> add a second guard at the Main Gate 8–9 am and brighter lights at Boundary Wall East.</p>
+      <Card className="flex items-start gap-3 bg-brand-50 ring-brand-100">
+        <Icon name="bulb" className="mt-0.5 h-5 w-5 text-brand" />
+        <p className="text-sm text-slate-700"><b>Suggestion:</b> add a second guard at the Main Gate 8–9 am and a third thermal camera on the east wall.</p>
       </Card>
     </div>
   );
@@ -357,27 +423,27 @@ function Audit() {
   const month = new Date(now).toLocaleDateString('en-IN', { month: 'long' });
   return (
     <div className="space-y-4 p-4 pb-8">
-      <div className="rounded-3xl bg-gradient-to-br from-navy to-navy-light p-5 text-white shadow-md">
-        <div className="text-xs font-bold uppercase tracking-wider text-saffron">Transparency · {month}</div>
+      <div className="rounded-3xl bg-gradient-to-br from-brand to-[#3D0D08] p-5 text-white shadow-md">
+        <div className="text-xs font-bold uppercase tracking-wider text-accent">Transparency · {month}</div>
         <p className="mt-2 text-lg font-bold leading-snug">{m.walks} walks, {m.followers} follower alerts, {m.faceSearches} face searches, {m.unblurs} unblurs reviewed by the student committee.</p>
         <div className="mt-4 grid grid-cols-4 gap-2 text-center">
           {[[m.walks, 'Walks'], [m.followers, 'Follower alerts'], [m.faceSearches, 'Face searches'], [m.unblurs, 'Unblurs']].map(([v, k]) => (
-            <div key={k} className="rounded-xl bg-white/10 px-1 py-2"><div className="text-xl font-extrabold">{v}</div><div className="text-[10px] leading-tight text-blue-100">{k}</div></div>
+            <div key={k} className="rounded-xl bg-white/10 px-1 py-2"><div className="text-xl font-extrabold">{v}</div><div className="text-[10px] leading-tight text-white/80">{k}</div></div>
           ))}
         </div>
-        <p className="mt-3 text-xs text-blue-200">Published to students every month. Face search is switched off by design.</p>
+        <p className="mt-3 text-xs text-white/65">Published to students every month. Face search is switched off by design.</p>
       </div>
       <div>
         <SectionTitle>Audit log</SectionTitle>
         <div className="mb-2 flex gap-2 overflow-x-auto no-scrollbar">
           {[['all', 'All'], ['footage', 'Footage'], ['lookup', 'Lookups'], ['system', 'System']].map(([k, l]) => (
-            <button key={k} type="button" onClick={() => setCat(k)} className={cls('shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold', cat === k ? 'bg-navy text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200')}>{l}</button>
+            <button key={k} type="button" onClick={() => setCat(k)} className={cls('shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold', cat === k ? 'bg-brand text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200')}>{l}</button>
           ))}
         </div>
         <Card className="divide-y divide-slate-100 p-0">
           {list.map((a) => (
             <div key={a.id} className="fade-up flex gap-3 px-4 py-3">
-              <span className={cls('mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg', a.cat === 'footage' ? 'bg-red-50 text-red-600' : a.cat === 'system' ? 'bg-slate-100 text-slate-600' : 'bg-blue-50 text-navy')}>
+              <span className={cls('mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg', a.cat === 'footage' ? 'bg-red-50 text-red-600' : a.cat === 'system' ? 'bg-slate-100 text-slate-600' : 'bg-brand-50 text-brand')}>
                 <Icon name={a.cat === 'footage' ? 'video' : a.cat === 'system' ? 'settings' : 'eye'} className="h-4 w-4" />
               </span>
               <div className="min-w-0 flex-1 text-sm">

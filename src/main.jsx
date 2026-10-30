@@ -3,15 +3,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { STUDENT, cls, makeInitial, pad } from './data.js';
 import { AppCtx, tick, toast, useApp } from './store.js';
-import { Avatar, Btn, Icon, Logo, Toasts } from './ui.jsx';
+import { Avatar, Btn, Icon, KleLogo, Logo, Toasts } from './ui.jsx';
+import { CAMPUS_SHORT } from './campus.js';
 import StudentApp from './student.jsx';
 import GuardApp from './guard.jsx';
 import AdminApp from './admin.jsx';
 
 const ROLES = [
   { id: 'student', label: 'Student', icon: 'user', title: 'Student app', who: 'Priya Sharma · 21BRS045', desc: 'Rotating QR ID, Saathi Walk night escort, LabLedger and your privacy.' },
-  { id: 'guard', label: 'Guard', icon: 'shield', title: 'Guard console', who: 'Ramesh, Sunita, Imran', desc: 'Live campus map, alert feed with clips, lights, speaker warnings.' },
-  { id: 'admin', label: 'Admin', icon: 'chart', title: 'Admin dashboard', who: 'Security & lab office', desc: 'Live stats, visitor passes, lab stock, heatmap and audit log.' },
+  { id: 'guard', label: 'Guard', icon: 'shield', title: 'Guard console', who: 'Ramesh, Sunita, Imran', desc: 'Live alerts, CCTV camera wall with PTZ and talk-down, campus map.' },
+  { id: 'admin', label: 'Admin', icon: 'chart', title: 'Admin dashboard', who: 'Security & lab office', desc: '3D digital twin, CCTV health, visitor passes, lab stock and audit log.' },
 ];
 const APPS = { student: StudentApp, guard: GuardApp, admin: AdminApp };
 
@@ -33,8 +34,10 @@ function App() {
   const [role, setRoleState] = useState('student');
   const [split, setSplit] = useState(false);
   const [gen, setGen] = useState(0);
-  const wide = useMedia('(min-width: 768px)');
-  const xl = useMedia('(min-width: 1200px)');
+  // Inside the Android app (Capacitor) we always run full screen, never in a phone frame.
+  const native = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  const wide = useMedia('(min-width: 768px)') && !native;
+  const xl = useMedia('(min-width: 1200px)') && !native;
   const splitOn = split && xl;
 
   const mutate = useCallback((fn) => setS((prev) => { const d = structuredClone(prev); fn(d); return d; }), []);
@@ -94,23 +97,27 @@ function Phone({ framed, role, children }) {
   const { reset, setRole, s } = useApp();
   const showBar = !framed && role !== 'start';
   const allToasts = s.toasts.filter((t) => t.role === 'all');
+  // Overlays (sheets, camera viewer, prompts) are absolutely positioned inside the
+  // content box below the status bar / role bar, so they never hide under it.
   const inner = (
-    <div data-phone={role} className="relative flex h-full w-full flex-col overflow-hidden bg-slate-50">
+    <div data-phone={role} className="flex h-full w-full flex-col overflow-hidden bg-slate-50">
       {framed && <StatusBar dark={role !== 'start' && role !== 'student'} />}
       {showBar && (
-        <div className="flex shrink-0 items-center gap-2 bg-slate-900 px-3 py-1.5 pt-[max(6px,env(safe-area-inset-top))]">
+        <div className="flex shrink-0 items-center gap-2 bg-brand-dark px-3 py-1.5 pt-[max(6px,env(safe-area-inset-top))]">
           <Logo className="h-6 w-6" />
           <RoleSwitch value={role} onChange={setRole} compact />
           <button type="button" onClick={reset} aria-label="Reset demo" className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white"><Icon name="refresh" className="h-4 w-4" /></button>
         </div>
       )}
-      {children}
-      {role !== 'start' && <Toasts role={role} />}
-      {allToasts.length > 0 && (
-        <div className="toast-in absolute inset-x-3 top-[52px] z-[70] flex items-center gap-2 rounded-2xl bg-emerald-600 px-3.5 py-3 text-sm font-medium text-white shadow-xl">
-          <Icon name="checkCircle" />{allToasts[allToasts.length - 1].msg}
-        </div>
-      )}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {children}
+        {role !== 'start' && <Toasts role={role} />}
+        {allToasts.length > 0 && (
+          <div className="toast-in absolute inset-x-3 top-2 z-[70] flex items-center gap-2 rounded-2xl bg-emerald-600 px-3.5 py-3 text-sm font-medium text-white shadow-xl">
+            <Icon name="checkCircle" />{allToasts[allToasts.length - 1].msg}
+          </div>
+        )}
+      </div>
     </div>
   );
   if (!framed) return <div className="h-[100dvh] w-full">{inner}</div>;
@@ -127,7 +134,7 @@ function StatusBar({ dark }) {
   const { now } = useApp();
   const d = new Date(now);
   return (
-    <div className={cls('relative z-[75] flex h-11 shrink-0 items-center justify-between px-7 pt-1 text-[13px] font-semibold', dark ? 'bg-navy text-white' : 'bg-slate-50 text-slate-900')}>
+    <div className={cls('relative z-[75] flex h-11 shrink-0 items-center justify-between px-7 pt-1 text-[13px] font-semibold', dark ? 'bg-brand text-white' : 'bg-slate-50 text-slate-900')}>
       <span className="tabular-nums">{d.getHours() % 12 || 12}:{pad(d.getMinutes())}</span>
       <span className="flex items-center gap-1.5">
         <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor" aria-hidden="true"><rect x="0" y="7" width="3" height="4" rx="1" /><rect x="4.5" y="5" width="3" height="6" rx="1" /><rect x="9" y="2.5" width="3" height="8.5" rx="1" /><rect x="13.5" y="0" width="3" height="11" rx="1" /></svg>
@@ -147,7 +154,7 @@ function RoleSwitch({ value, onChange, compact, light }) {
           <button key={r.id} type="button" role="tab" aria-selected={on} onClick={() => onChange(r.id)}
             className={cls('flex flex-1 items-center justify-center gap-1.5 rounded-full font-semibold transition',
               compact ? 'h-7 text-xs' : 'h-10 text-sm',
-              on ? (light ? 'bg-white text-navy shadow' : 'bg-saffron text-slate-900') : (light ? 'text-slate-600 hover:text-slate-900' : 'text-slate-300 hover:text-white'))}>
+              on ? (light ? 'bg-white text-brand shadow' : 'bg-accent text-slate-900') : (light ? 'text-slate-600 hover:text-slate-900' : 'text-slate-300 hover:text-white'))}>
             {!compact && <Icon name={r.icon} className="h-4 w-4" />}{r.label}
           </button>
         );
@@ -160,26 +167,27 @@ function StartScreen({ onOpen }) {
   const [pick, setPick] = useState('student');
   const r = ROLES.find((x) => x.id === pick);
   return (
-    <div className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto bg-gradient-to-b from-navy via-navy to-[#0f1d4a] text-white">
+    <div className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto bg-gradient-to-b from-brand via-brand to-[#3D0D08] text-white">
       <div className="px-5 pt-4"><RoleSwitch value={pick} onChange={setPick} /></div>
-      <div className="flex flex-col items-center px-6 pt-8 text-center">
+      <div className="mx-5 mt-4 flex items-center justify-center rounded-2xl bg-white px-4 py-2.5 shadow-lg"><KleLogo className="h-8" /></div>
+      <div className="flex flex-col items-center px-6 pt-7 text-center">
         <div className="relative">
-          <span className="pulse-soft absolute inset-0 rounded-[28px] bg-saffron/40" />
-          <div className="relative grid h-24 w-24 place-items-center rounded-[28px] bg-white shadow-2xl"><Logo className="h-16 w-16" /></div>
+          <span className="pulse-soft absolute inset-0 rounded-[26px] bg-accent/40" />
+          <div className="relative grid h-24 w-24 place-items-center rounded-[26px] bg-white/10 p-3 shadow-2xl ring-1 ring-white/20"><Logo className="h-full w-full" /></div>
         </div>
-        <h1 className="mt-5 text-4xl font-black tracking-tight">Kavach</h1>
-        <p className="mt-1 text-sm font-medium text-blue-100">Smart campus safety and asset protection</p>
-        <p className="mt-4 rounded-full bg-white/10 px-4 py-1.5 text-sm font-semibold text-saffron">Identify at the doors, anonymous in between.</p>
+        <h1 className="mt-5 font-serif text-[44px] font-semibold leading-none tracking-tight">Kavach</h1>
+        <p className="mt-2 text-sm font-medium text-white/80">Smart campus safety and asset protection</p>
+        <p className="mt-4 font-serif text-[17px] italic text-accent">Identify at the doors, anonymous in between.</p>
       </div>
 
       <div className="mt-7 px-5">
-        <div key={pick} className="fade-up rounded-3xl bg-white p-5 text-slate-900 shadow-xl">
+        <div key={pick} className="fade-up rounded-3xl bg-ivory p-5 text-slate-900 shadow-xl">
           <div className="flex items-center gap-3">
-            {pick === 'student' ? <Avatar size={52} className="ring-blue-100" /> : (
-              <span className="grid h-[52px] w-[52px] place-items-center rounded-full bg-blue-100 text-navy"><Icon name={r.icon} className="h-6 w-6" /></span>
+            {pick === 'student' ? <Avatar size={52} className="ring-sand" /> : (
+              <span className="grid h-[52px] w-[52px] place-items-center rounded-2xl bg-brand text-white"><Icon name={r.icon} className="h-6 w-6" /></span>
             )}
             <div>
-              <div className="text-lg font-bold">{r.title}</div>
+              <div className="font-serif text-xl font-semibold">{r.title}</div>
               <div className="text-xs text-slate-500">{r.who}</div>
             </div>
           </div>
@@ -191,15 +199,15 @@ function StartScreen({ onOpen }) {
       <div className="mt-6 space-y-3 px-5 pb-8">
         {[
           ['qr', 'Verified at the doors', 'Rotating QR + 1:1 face match at gate, labs and hostels.'],
-          ['eye', 'Anonymous in between', 'Cameras look for danger, never for names.'],
+          ['video', 'Anonymous in between', 'CCTV looks for danger, never for names. Faces stay blurred.'],
           ['moon', 'Saathi Walk', 'Opt-in night escort. Photos deleted when you reach.'],
         ].map(([ic, t, d]) => (
           <div key={t} className="flex items-start gap-3 rounded-2xl bg-white/[.07] p-3 ring-1 ring-white/10">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-saffron/20 text-saffron"><Icon name={ic} className="h-5 w-5" /></span>
-            <div><div className="text-sm font-semibold">{t}</div><div className="text-xs text-blue-200">{d}</div></div>
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent/20 text-accent"><Icon name={ic} className="h-5 w-5" /></span>
+            <div><div className="text-sm font-semibold">{t}</div><div className="text-xs text-white/65">{d}</div></div>
           </div>
         ))}
-        <p className="pt-2 text-center text-[11px] text-blue-300">Prototype · all data is mock · {STUDENT.name} is a demo student</p>
+        <p className="pt-2 text-center text-[11px] text-white/50">Prototype for {CAMPUS_SHORT} · all data is mock · {STUDENT.name} is a demo student</p>
       </div>
     </div>
   );
@@ -212,9 +220,10 @@ function TopBar({ started, setStarted, split, setSplit, canSplit }) {
       <button type="button" onClick={() => { setStarted(false); setSplit(false); }} className="flex items-center gap-2.5 text-left">
         <Logo className="h-9 w-9" />
         <span>
-          <span className="block text-lg font-black leading-none text-navy">Kavach</span>
+          <span className="block font-serif text-xl font-semibold leading-none text-brand">Kavach</span>
           <span className="block text-[11px] font-medium text-slate-500">Identify at the doors, anonymous in between.</span>
         </span>
+        <span className="ml-2 hidden border-l border-sand pl-3 xl:block"><KleLogo className="h-7" /></span>
       </button>
       <div className="mx-auto w-full max-w-[360px]">
         {!split && <RoleSwitch value={started ? role : null} onChange={setRole} light />}
@@ -233,9 +242,9 @@ function TopBar({ started, setStarted, split, setSplit, canSplit }) {
 const GUIDE = [
   ['student', 'My ID', 'Unlock with fingerprint, watch the QR rotate, simulate a gate scan, then scan again to see anti-passback.'],
   ['student', 'Saathi Walk', 'Help me get home → Start. Pass a checkpoint, then try Go missing and let the 30 s timer run out.'],
-  ['guard', 'Guard', 'See the missed checkpoint with last photo. Accept, turn on lights, play the speaker warning.'],
-  ['guard', 'Demo triggers', 'Fire a wall crossing or Oscilloscope leaving lab. Leave one alone for 2 min to escalate.'],
-  ['admin', 'Admin', 'Create a visitor pass, check lab stock, generate the stock report, read the audit log.'],
+  ['guard', 'Guard', 'See the missed checkpoint with last photo. Tap Live CAM to open the camera, then accept and play the speaker.'],
+  ['guard', 'Cameras', 'Open the camera wall. Use Demo to tamper a camera or take one offline and watch it turn amber.'],
+  ['admin', 'Admin twin', 'Open the 3D digital twin and the command centre. Tap a camera cone to see its feed.'],
 ];
 
 function DemoGuide() {
@@ -243,14 +252,15 @@ function DemoGuide() {
   return (
     <aside className="sticky top-4 hidden w-[280px] shrink-0 lg:block">
       <div className="rounded-3xl bg-white/80 p-5 shadow-sm ring-1 ring-slate-200 backdrop-blur">
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-saffron-dark"><Icon name="zap" className="h-4 w-4" />5-minute demo</div>
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-accent-dark"><Icon name="zap" className="h-4 w-4" />5-minute demo</div>
+        <div className="mt-2 font-serif text-lg font-semibold text-slate-900">Kavach at {CAMPUS_SHORT}</div>
         <ol className="mt-3 space-y-3">
           {GUIDE.map(([r, t, d], i) => (
             <li key={t}>
               <button type="button" onClick={() => setRole(r)} className="group flex gap-3 text-left">
-                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-navy text-xs font-bold text-white">{i + 1}</span>
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-xs font-bold text-white">{i + 1}</span>
                 <span>
-                  <span className="block text-sm font-semibold text-slate-900 group-hover:text-navy group-hover:underline">{t}</span>
+                  <span className="block text-sm font-semibold text-slate-900 group-hover:text-brand group-hover:underline">{t}</span>
                   <span className="block text-xs text-slate-500">{d}</span>
                 </span>
               </button>

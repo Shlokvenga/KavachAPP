@@ -1,113 +1,146 @@
-// Illustrated campus map shared by Guard (live alerts) and Admin (heatmap).
+// 2D illustrated map of KLE Tech, Hubballi, drawn from src/campus.js.
+// Used by the Guard app, the student's camera coverage view and as the
+// fallback when the 3D digital twin can't start.
+import { BOUNDARY, BUILDINGS, CAMERAS, GROUND, LAWNS, ROADS, SCALE, toMap } from './campus.js';
 import { ALERT_TYPES, CP, cls } from './data.js';
 
-const BUILDINGS = [
-  { x: 70, y: 118, w: 50, h: 24, label: 'Library' },
-  { x: 214, y: 90, w: 58, h: 22, label: 'Workshop' },
-  { x: 274, y: 178, w: 54, h: 22, label: 'Canteen' },
-  { x: 222, y: 26, w: 64, h: 30, label: 'Girls Hostel D' },
-  { x: 20, y: 58, w: 70, h: 24, label: 'Electronics Lab' },
-  { x: 24, y: 236, w: 58, h: 26, label: 'Admin Block' },
-];
-const TREES = [[40, 160], [52, 190], [160, 196], [150, 86], [326, 120], [236, 214], [24, 288], [120, 270], [334, 28], [180, 40], [110, 60], [150, 240]];
-const ROADS = [
-  'M180 300 L180 252 Q150 238 128 200 L128 152',
-  'M128 152 L204 122 L262 168',
-  'M262 168 Q312 128 300 70',
-  'M180 252 L262 168',
-  'M128 152 L66 94',
-  'M180 262 L92 228',
-];
+const KIND = { academic: '#EFE6D8', admin: '#FFFFFF', hostel: '#E3CFB4', amenity: '#EADCC6', research: '#B9CFA6', lab: '#EBDDC6' };
+const CAM_COL = { online: '#8C7552', offline: '#94a3b8', tampered: '#f59e0b' };
+const font = { fontFamily: "'Outfit Variable', Outfit, system-ui, sans-serif" };
 
-export default function CampusMap({ alerts = [], guards = [], walk = null, heat = null, selected, onSelect, showGuards = true }) {
+function rect(b) {
+  const p = toMap(b.x - b.w / 2, b.y + b.d / 2);
+  return { x: p.x, y: p.y, w: b.w * SCALE, h: b.d * SCALE };
+}
+const pts = (line) => line.map(([x, y]) => { const p = toMap(x, y); return `${p.x},${p.y}`; }).join(' ');
+
+function wedge(c) {
+  const o = toMap(c.x, c.y);
+  let d = `M${o.x} ${o.y}`;
+  for (let i = 0; i <= 8; i++) {
+    const a = ((c.heading - c.fov / 2 + (c.fov * i) / 8) * Math.PI) / 180;
+    const p = toMap(c.x + Math.sin(a) * c.range, c.y + Math.cos(a) * c.range);
+    d += ` L${p.x} ${p.y}`;
+  }
+  return d + 'Z';
+}
+
+export default function CampusMap({
+  alerts = [], guards = [], walk = null, heat = null, selected, onSelect, showGuards = true,
+  cams = null, showCams = false, onCam, selectedCam, highlightCams = null,
+}) {
   const open = alerts.filter((a) => a.status !== 'resolved');
   const byCp = {};
-  const route = walk && walk.phase === 'active' ? walk.steps.map((s) => CP[s.cp]) : null;
+  const route = walk && walk.phase === 'active' ? walk.steps.map((s) => toMap(CP[s.cp].x, CP[s.cp].y)) : null;
   const lastIdx = walk ? walk.steps.map((s) => s.status).lastIndexOf('passed') : -1;
   const walkPos = route && lastIdx >= 0 ? route[lastIdx] : null;
   const maxHeat = heat ? Math.max(1, ...Object.values(heat)) : 1;
-  const font = { fontFamily: 'Inter, system-ui, sans-serif' };
+  const wall = rect({ x: 0, y: 0, w: BOUNDARY.w, d: BOUNDARY.d });
+  const gate = toMap(0, -210);
+  const ground = toMap(GROUND.x, GROUND.y);
 
   return (
-    <svg viewBox="0 0 360 300" className="h-auto w-full select-none" role="img" aria-label="Campus map" style={font}>
-      <rect width="360" height="300" rx="18" fill="#e7f3ea" />
-      <rect x="8" y="8" width="344" height="284" rx="14" fill="none" stroke="#94a3b8" strokeWidth="3" />
-      <path d="M352 150 L352 280" stroke={open.some((a) => a.cp === 'WALL') ? '#dc2626' : '#64748b'} strokeWidth="5" strokeLinecap="round" />
-      <ellipse cx="292" cy="250" rx="44" ry="26" fill="#cfe8d4" stroke="#a7d3b0" />
-      <text x="292" y="253" textAnchor="middle" fontSize="8" fill="#4d7c5a" fontWeight="600">Sports ground</text>
-      {TREES.map(([x, y]) => <circle key={x + '-' + y} cx={x} cy={y} r="6" fill="#a7d3b0" />)}
-      {ROADS.map((d) => <path key={d} d={d} stroke="#cbd5e1" strokeWidth="13" fill="none" strokeLinecap="round" strokeLinejoin="round" />)}
-      {ROADS.map((d) => <path key={'w' + d} d={d} stroke="#fff" strokeWidth="9" fill="none" strokeLinecap="round" strokeLinejoin="round" />)}
-      {BUILDINGS.map((b) => (
-        <g key={b.label}>
-          <rect x={b.x} y={b.y} width={b.w} height={b.h} rx="5" fill="#dbe4f3" stroke="#9fb1d6" />
-          <text x={b.x + b.w / 2} y={b.y + b.h / 2 + 3} textAnchor="middle" fontSize="7.5" fontWeight="600" fill="#334155">{b.label}</text>
-        </g>
-      ))}
-      <g>
-        <rect x="160" y="286" width="8" height="12" rx="2" fill="#1E3A8A" />
-        <rect x="192" y="286" width="8" height="12" rx="2" fill="#1E3A8A" />
-        <text x="180" y="297" textAnchor="middle" fontSize="7" fontWeight="700" fill="#1E3A8A">GATE</text>
-      </g>
-      <text x="340" y="146" textAnchor="end" fontSize="7" fill="#64748b" fontWeight="600">East wall</text>
+    <svg viewBox="0 0 360 300" className="h-auto w-full select-none" role="img" aria-label="KLE Tech campus map" style={font}>
+      <rect width="360" height="300" rx="18" fill="#E9E2D6" />
+      <rect x="0" y="289" width="360" height="11" fill="#5b524c" />
+      <text x="352" y="297" textAnchor="end" fontSize="6.5" fill="#E3D9C7" fontWeight="600">PB Road</text>
+      <rect x={wall.x} y={wall.y} width={wall.w} height={wall.h} rx="6" fill="#DCE5CB" stroke="#6B5E58" strokeWidth="2.5" />
+      <path d={`M${wall.x + wall.w} ${toMap(0, 110).y} L${wall.x + wall.w} ${toMap(0, -110).y}`} stroke={open.some((a) => a.cp === 'WALL') ? '#dc2626' : '#6B5E58'} strokeWidth="4.5" strokeLinecap="round" />
+      {LAWNS.map((l) => { const r = rect(l); return <rect key={l.x + ',' + l.y} x={r.x} y={r.y} width={r.w} height={r.h} rx="4" fill="#BFD3A8" />; })}
+      <ellipse cx={ground.x} cy={ground.y} rx={GROUND.rx * SCALE} ry={GROUND.ry * SCALE} fill="#B5CF9C" stroke="#F7F1EE" strokeWidth="1.5" />
+      <text x={ground.x} y={ground.y + 2.5} textAnchor="middle" fontSize="6.5" fill="#4d6b3c" fontWeight="600">Sports ground</text>
+      {ROADS.map((r) => <polyline key={'r' + pts(r)} points={pts(r)} stroke="#CBBFA8" strokeWidth="9" fill="none" strokeLinecap="round" strokeLinejoin="round" />)}
+      {ROADS.map((r) => <polyline key={'w' + pts(r)} points={pts(r)} stroke="#FBF8F4" strokeWidth="6" fill="none" strokeLinecap="round" strokeLinejoin="round" />)}
+      <rect x={gate.x - 9} y={gate.y - 3} width="18" height="7" rx="2" fill="#6B170D" />
+      {BUILDINGS.map((b) => {
+        const r = rect(b);
+        return (
+          <g key={b.id}>
+            <rect x={r.x} y={r.y} width={r.w} height={r.h} rx="3" fill={KIND[b.kind]} stroke="#B9A994" strokeWidth=".8" />
+            <text x={r.x + r.w / 2} y={r.y + r.h / 2 + 2.4} textAnchor="middle" fontSize="6.6" fontWeight="600" fill="#433B36">{b.short}</text>
+          </g>
+        );
+      })}
 
-      {route && (
-        <polyline points={route.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#F59E0B" strokeWidth="3.5"
-          strokeDasharray="7 5" strokeLinecap="round" className="route-dash" />
-      )}
+      {showCams && CAMERAS.map((c) => {
+        const st = (cams && cams[c.id] && cams[c.id].status) || 'online';
+        const hi = (highlightCams && highlightCams.includes(c.id)) || selectedCam === c.id;
+        return <path key={'fov' + c.id} d={wedge(c)} fill={st === 'online' ? '#BFA682' : CAM_COL[st]} opacity={hi ? 0.5 : 0.22} />;
+      })}
+
+      {route && <polyline points={route.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#C9A227" strokeWidth="3" strokeDasharray="6 4" strokeLinecap="round" className="route-dash" />}
 
       {heat && Object.entries(heat).map(([id, n]) => {
-        const p = CP[id];
+        const p = toMap(CP[id].x, CP[id].y);
         const k = n / maxHeat;
         return (
           <g key={'h' + id}>
-            <circle cx={p.x} cy={p.y} r={12 + k * 26} fill="#ef4444" opacity={0.12 + k * 0.3} />
-            <circle cx={p.x} cy={p.y} r={8 + k * 14} fill="#ef4444" opacity={0.18 + k * 0.35} />
+            <circle cx={p.x} cy={p.y} r={12 + k * 24} fill="#BF383C" opacity={0.12 + k * 0.28} />
+            <circle cx={p.x} cy={p.y} r={8 + k * 12} fill="#BF383C" opacity={0.18 + k * 0.32} />
           </g>
         );
       })}
 
-      {Object.values(CP).map((p) => (
-        <g key={p.id}>
-          <circle cx={p.x} cy={p.y} r="8.5" fill="#fff" stroke="#1E3A8A" strokeWidth="2" />
-          <text x={p.x} y={p.y + 3} textAnchor="middle" fontSize={p.tag.length > 1 ? 6.5 : 8.5} fontWeight="800" fill="#1E3A8A">{p.tag}</text>
-        </g>
-      ))}
+      {Object.values(CP).map((c) => {
+        const p = toMap(c.x, c.y);
+        return (
+          <g key={c.id}>
+            <rect x={p.x - 7.5} y={p.y - 7.5} width="15" height="15" rx="4.5" fill="#fff" stroke="#6B170D" strokeWidth="1.8" />
+            <text x={p.x} y={p.y + 3} textAnchor="middle" fontSize="8" fontWeight="800" fill="#6B170D">{c.tag}</text>
+          </g>
+        );
+      })}
 
       {heat && Object.entries(heat).map(([id, n]) => {
-        const lx = CP[id].x > 320 ? CP[id].x - 27 : CP[id].x + 9;
+        const p = toMap(CP[id].x, CP[id].y);
+        const lx = p.x > 320 ? p.x - 27 : p.x + 9;
         return (
           <g key={'hl' + id}>
-            <rect x={lx} y={CP[id].y - 18} width="18" height="12" rx="6" fill="#991b1b" />
-            <text x={lx + 9} y={CP[id].y - 9.5} textAnchor="middle" fontSize="8" fontWeight="800" fill="#fff">{n}</text>
+            <rect x={lx} y={p.y - 18} width="18" height="12" rx="6" fill="#6B170D" />
+            <text x={lx + 9} y={p.y - 9.5} textAnchor="middle" fontSize="8" fontWeight="800" fill="#fff">{n}</text>
           </g>
         );
       })}
 
-      {open.filter((a) => a.status === 'accepted' && a.acceptedBy).map((a) => {
-        const g = guards.find((x) => x.id === a.acceptedBy);
-        if (!g || !a.from) return null;
-        return <line key={'nav' + a.id} x1={a.from.x} y1={a.from.y} x2={CP[a.cp].x} y2={CP[a.cp].y} stroke="#1E3A8A" strokeWidth="2" strokeDasharray="3 3" opacity=".6" />;
+      {showCams && CAMERAS.map((c) => {
+        const st = (cams && cams[c.id] && cams[c.id].status) || 'online';
+        const p = toMap(c.x, c.y);
+        const sel = selectedCam === c.id;
+        return (
+          <g key={'cam' + c.id} onClick={onCam ? () => onCam(c.id) : undefined} className={cls(onCam && 'cursor-pointer')}>
+            <circle cx={p.x} cy={p.y} r={sel ? 6 : 4.2} fill={CAM_COL[st]} stroke="#fff" strokeWidth="1.4" />
+            {st !== 'online' && <circle cx={p.x} cy={p.y} r="5" fill={CAM_COL[st]} className="pulse-ring" />}
+            <circle cx={p.x} cy={p.y} r="11" fill="transparent" />
+          </g>
+        );
+      })}
+
+      {open.filter((a) => a.status === 'accepted' && a.acceptedBy && a.from).map((a) => {
+        const f = toMap(a.from.x, a.from.y); const t = toMap(CP[a.cp].x, CP[a.cp].y);
+        return <line key={'nav' + a.id} x1={f.x} y1={f.y} x2={t.x} y2={t.y} stroke="#2563eb" strokeWidth="2" strokeDasharray="3 3" opacity=".7" />;
       })}
 
       {walkPos && (
         <g style={{ transform: `translate(${walkPos.x}px, ${walkPos.y}px)`, transition: 'transform 1.2s ease-in-out' }}>
-          <circle r="7" fill="#F59E0B" opacity=".5" className="pulse-ring" />
-          <circle r="6" fill="#F59E0B" stroke="#fff" strokeWidth="2" />
-          <text y="-10" textAnchor="middle" fontSize="7" fontWeight="700" fill="#92400e">Priya</text>
+          <circle r="7" fill="#C9A227" opacity=".5" className="pulse-ring" />
+          <circle r="6" fill="#C9A227" stroke="#fff" strokeWidth="2" />
+          <text y="-10" textAnchor="middle" fontSize="7" fontWeight="700" fill="#6B170D">Priya</text>
         </g>
       )}
 
-      {showGuards && guards.map((g) => (
-        <g key={g.id} style={{ transform: `translate(${g.x}px, ${g.y}px)`, transition: 'transform 2.5s ease-in-out' }}>
-          <circle r="8" fill="#1E3A8A" stroke="#fff" strokeWidth="2" />
-          <text y="3" textAnchor="middle" fontSize="8" fontWeight="800" fill="#fff">{g.name[0]}</text>
-        </g>
-      ))}
+      {showGuards && guards.map((g) => {
+        const p = toMap(g.x, g.y);
+        return (
+          <g key={g.id} style={{ transform: `translate(${p.x}px, ${p.y}px)`, transition: 'transform 2.5s ease-in-out' }}>
+            <circle r="7.5" fill="#2563eb" stroke="#fff" strokeWidth="2" />
+            <text y="3" textAnchor="middle" fontSize="8" fontWeight="800" fill="#fff">{g.name[0]}</text>
+          </g>
+        );
+      })}
 
       {open.map((a) => {
         const k = (byCp[a.cp] = (byCp[a.cp] || 0) + 1) - 1;
-        const p = CP[a.cp];
+        const p = toMap(CP[a.cp].x, CP[a.cp].y);
         const x = p.x + 11 + (k % 3) * 9;
         const y = p.y - 9 - Math.floor(k / 3) * 9;
         const crit = ALERT_TYPES[a.type].pri !== 'medium';

@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import qrcode from 'qrcode-generator';
 import { CP, cls, pad } from './data.js';
+import kleLogo from './assets/kle-logo.webp';
+import kleMark from './assets/kle-mark.webp';
 import { useApp } from './store.js';
 
 const ICONS = {
@@ -76,29 +78,35 @@ export function Icon({ name, className = 'h-5 w-5', sw = 2 }) {
   );
 }
 
+// Kavach product mark: shield on the KLE rounded-square brand shape.
 export function Logo({ className = 'h-8 w-8' }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="#1E3A8A" stroke="#fff" strokeWidth="1.2" />
-      <path d="m8.6 12 2.4 2.4 4.4-4.6" stroke="#F59E0B" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <rect width="24" height="24" rx="6" fill="#6B170D" />
+      <path d="M12 19.5s6-3 6-7.5V7l-6-2.2L6 7v5c0 4.5 6 7.5 6 7.5z" fill="none" stroke="#F7F1EE" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="m9.2 11.9 2 2 3.7-3.9" stroke="#BFA682" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-// Default white card; a bg-* or ring colour in className replaces the default instead of fighting it.
+// Official KLE Technological University logo (from the brand guidebook). Use on light backgrounds only.
+export function KleLogo({ className = 'h-8', mark }) {
+  return <img src={mark ? kleMark : kleLogo} alt="KLE Technological University" className={cls('w-auto select-none', className)} draggable="false" />;
+}
+
 export const Card = ({ className = '', children, ...p }) => (
   <div className={cls('rounded-2xl p-4 shadow-sm ring-1', !/(^|\s)bg-(?!gradient)/.test(className) && 'bg-white',
     !/(^|\s)ring-(?!\d|inset)/.test(className) && 'ring-slate-200/70', className)} {...p}>{children}</div>
 );
 
 const BTN = {
-  primary: 'bg-navy text-white hover:bg-navy-light active:bg-navy-dark shadow-sm',
-  accent: 'bg-saffron text-slate-900 hover:brightness-105 active:brightness-95 shadow-sm',
+  primary: 'bg-brand text-white hover:bg-brand-light active:bg-brand-dark shadow-sm',
+  accent: 'bg-accent text-slate-900 hover:brightness-105 active:brightness-95 shadow-sm',
   danger: 'bg-red-600 text-white hover:bg-red-500 active:bg-red-700 shadow-sm',
   success: 'bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 shadow-sm',
-  outline: 'bg-white text-navy ring-1 ring-inset ring-slate-300 hover:bg-slate-50 active:bg-slate-100',
-  soft: 'bg-blue-50 text-navy hover:bg-blue-100 active:bg-blue-200',
-  ghost: 'text-navy hover:bg-slate-100',
+  outline: 'bg-white text-brand ring-1 ring-inset ring-sand hover:bg-ivory active:bg-sand/60',
+  soft: 'bg-brand-50 text-brand hover:bg-brand-100 active:bg-brand-100',
+  ghost: 'text-brand hover:bg-slate-100',
   dark: 'bg-white/10 text-white ring-1 ring-inset ring-white/20 hover:bg-white/20',
 };
 export function Btn({ v = 'primary', size = 'md', icon, className, children, disabled, ...p }) {
@@ -129,12 +137,12 @@ export function Stepper({ value, onChange, max = 99 }) {
   return (
     <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1">
       <button type="button" aria-label="Less" onClick={() => onChange(Math.max(0, value - 1))}
-        className="grid h-8 w-8 place-items-center rounded-lg bg-white text-navy shadow-sm active:scale-95 disabled:opacity-40" disabled={value <= 0}>
+        className="grid h-8 w-8 place-items-center rounded-lg bg-white text-brand shadow-sm active:scale-95 disabled:opacity-40" disabled={value <= 0}>
         <Icon name="minus" className="h-4 w-4" />
       </button>
       <span className="w-8 text-center font-bold tabular-nums">{value}</span>
       <button type="button" aria-label="More" onClick={() => onChange(Math.min(max, value + 1))}
-        className="grid h-8 w-8 place-items-center rounded-lg bg-white text-navy shadow-sm active:scale-95 disabled:opacity-40" disabled={value >= max}>
+        className="grid h-8 w-8 place-items-center rounded-lg bg-white text-brand shadow-sm active:scale-95 disabled:opacity-40" disabled={value >= max}>
         <Icon name="plus" className="h-4 w-4" />
       </button>
     </div>
@@ -149,7 +157,7 @@ export function Sheet({ onClose, title, children, tall }) {
         <div className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-slate-300" />
         {title && (
           <div className="flex shrink-0 items-center justify-between px-5 pb-1 pt-3">
-            <h3 className="text-lg font-bold text-slate-900">{title}</h3>
+            <h3 className="font-serif text-xl font-semibold text-slate-900">{title}</h3>
             <button type="button" aria-label="Close" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200">
               <Icon name="x" className="h-4 w-4" />
             </button>
@@ -161,7 +169,7 @@ export function Sheet({ onClose, title, children, tall }) {
   );
 }
 
-export function Ring({ value, max, size = 48, stroke = 4, color = '#F59E0B', track = '#e2e8f0', children, className }) {
+export function Ring({ value, max, size = 48, stroke = 4, color = '#BFA682', track = '#e2e8f0', children, className }) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const off = c * (1 - Math.max(0, Math.min(1, value / max)));
@@ -195,8 +203,9 @@ export function QR({ text, size = 200, fade }) {
       <g transform={`translate(${(n - logo) / 2} ${(n - logo) / 2})`} shapeRendering="geometricPrecision">
         <rect width={logo} height={logo} rx={logo * 0.22} fill="#fff" />
         <svg x={logo * 0.1} y={logo * 0.1} width={logo * 0.8} height={logo * 0.8} viewBox="0 0 24 24">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="#1E3A8A" />
-          <path d="m8.6 12 2.4 2.4 4.4-4.6" stroke="#F59E0B" strokeWidth="2.6" fill="none" strokeLinecap="round" />
+          <rect width="24" height="24" rx="6" fill="#6B170D" />
+          <path d="M12 19.5s6-3 6-7.5V7l-6-2.2L6 7v5c0 4.5 6 7.5 6 7.5z" fill="none" stroke="#F7F1EE" strokeWidth="1.6" />
+          <path d="m9.2 11.9 2 2 3.7-3.9" stroke="#BFA682" strokeWidth="2.2" fill="none" strokeLinecap="round" />
         </svg>
       </g>
     </svg>
@@ -209,7 +218,7 @@ export function Avatar({ size = 48, className }) {
       <circle cx="32" cy="32" r="32" fill="#FDE68A" />
       <path d="M17 27c-1 10 0 17 4 21l5-3c-3-4-4-10-3-16z" fill="#1f2937" />
       <path d="M47 27c1 10 0 17-4 21l-5-3c3-4 4-10 3-16z" fill="#1f2937" />
-      <path d="M10 64c2-12 11-18 22-18s20 6 22 18z" fill="#1E3A8A" />
+      <path d="M10 64c2-12 11-18 22-18s20 6 22 18z" fill="#6B170D" />
       <path d="M27 42h10v6a5 5 0 0 1-10 0z" fill="#B97A4E" />
       <ellipse cx="32" cy="30" rx="11" ry="13" fill="#C98B5C" />
       <path d="M20 29c0-11 6-16 12-16s13 5 12 16c-3-6-7-9-12-9.5-2 3-7 7-12 9.5z" fill="#1f2937" />
@@ -222,9 +231,9 @@ export function Avatar({ size = 48, className }) {
 }
 
 // Night-time still from a checkpoint camera (illustration).
-export function NightPhoto({ cp, time, className, deleted }) {
+export function NightPhoto({ cp, time, className, deleted, cam }) {
   const ts = new Date(time);
-  const stamp = `CAM-${CP[cp].tag.toUpperCase()} · ${pad(ts.getHours())}:${pad(ts.getMinutes())}:${pad(ts.getSeconds())}`;
+  const stamp = `${cam || 'CAM-' + CP[cp].tag.toUpperCase()} · ${pad(ts.getHours())}:${pad(ts.getMinutes())}:${pad(ts.getSeconds())}`;
   return (
     <div className={cls('relative overflow-hidden rounded-xl bg-slate-900', className)}>
       <svg viewBox="0 0 160 100" className={cls('h-full w-full', deleted && 'opacity-30 grayscale')} preserveAspectRatio="xMidYMid slice">
@@ -264,7 +273,7 @@ export function NightPhoto({ cp, time, className, deleted }) {
 }
 
 // 10 second clip placeholder. Plays a fake clip and logs the view in the audit log.
-export function ClipPlayer({ cp, onView, label = '10 s clip · faces blurred' }) {
+export function ClipPlayer({ cp, cam, onView, label = '10 s clip · faces blurred' }) {
   const [playing, setPlaying] = useState(false);
   const [done, setDone] = useState(false);
   const play = () => {
@@ -289,18 +298,18 @@ export function ClipPlayer({ cp, onView, label = '10 s clip · faces blurred' })
         {Array.from({ length: 12 }).map((_, i) => <rect key={i} x="0" y={i * 8} width="160" height="1" fill="#fff" opacity=".03" />)}
       </svg>
       <div className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 font-mono text-[9px] text-white">
-        <span className="h-1.5 w-1.5 rounded-full bg-red-500 blink" />CAM-{CP[cp].tag.toUpperCase()}
+        <span className="h-1.5 w-1.5 rounded-full bg-red-500 blink" />{cam || 'CAM-' + CP[cp].tag.toUpperCase()}
       </div>
       {!playing && (
         <div className="absolute inset-0 grid place-items-center">
-          <span className="grid h-11 w-11 place-items-center rounded-full bg-white/90 text-navy shadow-lg transition group-hover:scale-105">
+          <span className="grid h-11 w-11 place-items-center rounded-full bg-white/90 text-brand shadow-lg transition group-hover:scale-105">
             <Icon name={done ? 'refresh' : 'play'} className="h-5 w-5" />
           </span>
         </div>
       )}
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pb-1.5 pt-4 text-[10px] font-medium text-white">
         {playing ? 'Playing… view logged in audit' : label}
-        {playing && <div className="mt-1 h-1 overflow-hidden rounded bg-white/20"><div className="h-full bg-saffron" style={{ animation: 'progress 10s linear both' }} /></div>}
+        {playing && <div className="mt-1 h-1 overflow-hidden rounded bg-white/20"><div className="h-full bg-accent" style={{ animation: 'progress 10s linear both' }} /></div>}
       </div>
     </button>
   );
@@ -323,11 +332,11 @@ export function ScanOverlay({ title, subtitle, steps, duration = 2400, mode = 'q
   const per = duration / steps.length;
   return (
     <div className="fade-in absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/[.96] p-6 text-white">
-      <div className="text-xs font-semibold uppercase tracking-[.2em] text-saffron">{subtitle}</div>
+      <div className="text-xs font-semibold uppercase tracking-[.2em] text-accent">{subtitle}</div>
       <div className="mt-1 text-center text-lg font-bold">{title}</div>
       <div className="relative mt-6 h-52 w-52 overflow-hidden rounded-3xl bg-slate-900 ring-1 ring-white/10">
         {['left-3 top-3 border-l-4 border-t-4 rounded-tl-xl', 'right-3 top-3 border-r-4 border-t-4 rounded-tr-xl', 'left-3 bottom-3 border-l-4 border-b-4 rounded-bl-xl', 'right-3 bottom-3 border-r-4 border-b-4 rounded-br-xl'].map((c) => (
-          <span key={c} className={cls('absolute h-8 w-8 border-saffron', c)} />
+          <span key={c} className={cls('absolute h-8 w-8 border-accent', c)} />
         ))}
         <div className="absolute inset-0 grid place-items-center text-slate-500">
           {mode === 'face' && (
@@ -352,7 +361,7 @@ export function ScanOverlay({ title, subtitle, steps, duration = 2400, mode = 'q
               {isDone ? (
                 <span className="pop grid h-5 w-5 place-items-center rounded-full bg-emerald-500"><Icon name="check" className="h-3.5 w-3.5" sw={3} /></span>
               ) : active ? (
-                <span className="spin h-5 w-5 rounded-full border-2 border-saffron border-t-transparent" />
+                <span className="spin h-5 w-5 rounded-full border-2 border-accent border-t-transparent" />
               ) : (
                 <span className="h-5 w-5 rounded-full border-2 border-slate-600" />
               )}
@@ -373,7 +382,7 @@ export function ResultSheet({ ok, title, rows = [], note, onClose, actions }) {
         <div className={cls('pop grid h-20 w-20 place-items-center rounded-full', ok ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600')}>
           <Icon name={ok ? 'check' : 'x'} className="h-10 w-10" sw={3} />
         </div>
-        <h3 className={cls('mt-4 text-xl font-bold', ok ? 'text-slate-900' : 'text-red-700')}>{title}</h3>
+        <h3 className={cls('mt-4 font-serif text-[22px] font-semibold', ok ? 'text-slate-900' : 'text-red-700')}>{title}</h3>
         {note && <p className="mt-1 text-sm text-slate-500">{note}</p>}
       </div>
       {rows.length > 0 && (
@@ -397,7 +406,7 @@ const TOAST_STYLE = {
   success: ['bg-emerald-600', 'checkCircle'],
   alert: ['bg-red-600', 'alert'],
   warn: ['bg-amber-500', 'alert'],
-  info: ['bg-navy', 'bell'],
+  info: ['bg-brand', 'bell'],
 };
 const ROLE_LABEL = { student: 'Student app', guard: 'Guard app', admin: 'Admin' };
 
@@ -409,7 +418,7 @@ export function Toasts({ role }) {
   const list = [...other, ...own];
   if (!list.length) return null;
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-[52px] z-[60] flex flex-col items-center gap-2 px-3" aria-live="polite">
+    <div className="pointer-events-none absolute inset-x-0 top-2 z-[60] flex flex-col items-center gap-2 px-3" aria-live="polite">
       {list.map((t) => {
         const [bg, ic] = TOAST_STYLE[t.kind] || TOAST_STYLE.info;
         const other = t.role !== role;
@@ -440,11 +449,11 @@ export function BottomNav({ items, value, onChange }) {
         const on = it.id === value;
         return (
           <button key={it.id} type="button" onClick={() => onChange(it.id)} aria-current={on ? 'page' : undefined}
-            className={cls('flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[11px] transition', on ? 'font-semibold text-navy' : 'text-slate-500 hover:text-slate-700')}>
-            <span className={cls('relative grid h-8 w-12 place-items-center rounded-full transition', on && 'bg-blue-100')}>
+            className={cls('flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[11px] transition', on ? 'font-semibold text-brand' : 'text-slate-500 hover:text-slate-700')}>
+            <span className={cls('relative grid h-8 w-12 place-items-center rounded-full transition', on && 'bg-brand-100')}>
               <Icon name={it.icon} className="h-5 w-5" sw={on ? 2.3 : 2} />
               {it.badge > 0 && <span className="absolute -right-0.5 -top-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white ring-2 ring-white">{it.badge}</span>}
-              {it.dot && <span className="absolute right-1 top-0.5 h-2.5 w-2.5 rounded-full bg-saffron ring-2 ring-white blink" />}
+              {it.dot && <span className="absolute right-1 top-0.5 h-2.5 w-2.5 rounded-full bg-accent ring-2 ring-white blink" />}
             </span>
             {it.label}
           </button>
@@ -463,7 +472,7 @@ export function ScreenHeader({ title, sub, right, onBack }) {
         </button>
       )}
       <div className="min-w-0 flex-1">
-        <h1 className="truncate text-xl font-bold text-slate-900">{title}</h1>
+        <h1 className="truncate font-serif text-[22px] font-semibold text-slate-900">{title}</h1>
         {sub && <p className="truncate text-xs text-slate-500">{sub}</p>}
       </div>
       {right}
@@ -473,7 +482,7 @@ export function ScreenHeader({ title, sub, right, onBack }) {
 
 export const SectionTitle = ({ children, right }) => (
   <div className="mb-2 mt-1 flex items-center justify-between px-1">
-    <h2 className="text-[13px] font-bold uppercase tracking-wide text-slate-500">{children}</h2>
+    <h2 className="text-[12px] font-semibold uppercase tracking-[.14em] text-slate-500">{children}</h2>
     {right}
   </div>
 );

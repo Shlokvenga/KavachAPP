@@ -6,7 +6,9 @@ import {
   skipTime, toggleLights, TRIGGERS, useApp, visitorWrongZone,
 } from './store.js';
 import CampusMap from './map.jsx';
-import { Badge, BottomNav, Btn, Card, ClipPlayer, DemoPanel, Icon, LiveDot, NightPhoto, SectionTitle } from './ui.jsx';
+import { CAMERAS } from './campus.js';
+import { CamTile, CameraViewer } from './cctv.jsx';
+import { Badge, BottomNav, Btn, Card, ClipPlayer, DemoPanel, Icon, LiveDot, NightPhoto, SectionTitle, Toggle } from './ui.jsx';
 
 const byPriority = (a, b) => PRI[ALERT_TYPES[a.type].pri].rank - PRI[ALERT_TYPES[b.type].pri].rank || b.time - a.time;
 
@@ -14,25 +16,27 @@ export default function GuardApp() {
   const { s } = useApp();
   const [tab, setTab] = useState('alerts');
   const [me, setMe] = useState('ramesh');
+  const [cam, setCam] = useState(null);
   const g = guardById(s, me);
   const open = s.alerts.filter((a) => a.status !== 'resolved');
+  const camIssues = Object.values(s.cams).filter((c) => c.status !== 'online').length;
 
   return (
     <>
-      <div className="shrink-0 bg-navy px-4 pb-3 pt-3 text-white">
+      <div className="shrink-0 bg-brand px-4 pb-3 pt-3 text-white">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs font-medium text-blue-200">Guard console</div>
+            <div className="text-xs font-medium text-white/65">Guard console</div>
             <div className="text-lg font-bold">On duty · {g.name}</div>
-            <div className="text-xs text-blue-200">Post: {g.post} · Radio channel 4</div>
+            <div className="text-xs text-white/65">Post: {g.post} · Radio channel 4</div>
           </div>
           <Badge className="bg-white/10 text-white"><LiveDot />Live</Badge>
         </div>
         <div className="mt-2 flex gap-1.5" role="tablist" aria-label="Switch guard">
           {s.guards.map((x) => (
             <button key={x.id} type="button" onClick={() => setMe(x.id)}
-              className={cls('flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition', me === x.id ? 'bg-saffron text-slate-900' : 'bg-white/10 text-blue-100 hover:bg-white/20')}>
-              <span className={cls('grid h-4 w-4 place-items-center rounded-full text-[9px]', me === x.id ? 'bg-slate-900 text-saffron' : 'bg-white/20')}>{x.name[0]}</span>
+              className={cls('flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition', me === x.id ? 'bg-accent text-slate-900' : 'bg-white/10 text-white/80 hover:bg-white/20')}>
+              <span className={cls('grid h-4 w-4 place-items-center rounded-full text-[9px]', me === x.id ? 'bg-slate-900 text-accent' : 'bg-white/20')}>{x.name[0]}</span>
               {x.name}
             </button>
           ))}
@@ -40,15 +44,19 @@ export default function GuardApp() {
       </div>
 
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto" key={tab}>
-        {tab === 'alerts' && <AlertFeed me={me} />}
-        {tab === 'map' && <MapTab me={me} />}
+        {tab === 'alerts' && <AlertFeed me={me} openCam={setCam} />}
+        {tab === 'map' && <MapTab me={me} openCam={setCam} />}
+        {tab === 'cams' && <CamerasTab openCam={setCam} />}
         {tab === 'walks' && <WalksTab />}
         {tab === 'demo' && <DemoTab />}
       </div>
 
+      {cam && <CameraViewer key={cam} camId={cam} onClose={() => setCam(null)} who={`Guard ${g.name}`} guardId={me} />}
+
       <BottomNav value={tab} onChange={setTab} items={[
         { id: 'alerts', label: 'Alerts', icon: 'bell', badge: open.length },
         { id: 'map', label: 'Live map', icon: 'map' },
+        { id: 'cams', label: 'Cameras', icon: 'video', badge: camIssues },
         { id: 'walks', label: 'Walks', icon: 'walk', dot: s.walk && s.walk.phase === 'active' },
         { id: 'demo', label: 'Demo', icon: 'zap' },
       ]} />
@@ -56,7 +64,7 @@ export default function GuardApp() {
   );
 }
 
-function AlertFeed({ me }) {
+function AlertFeed({ me, openCam }) {
   const { s } = useApp();
   const [filter, setFilter] = useState('open');
   const open = s.alerts.filter((a) => a.status !== 'resolved').sort(byPriority);
@@ -66,14 +74,14 @@ function AlertFeed({ me }) {
   return (
     <div className="space-y-3 p-4 pb-8">
       <div className="grid grid-cols-3 gap-2">
-        {[[open.filter((a) => a.status === 'new').length, 'New', 'text-red-600'], [open.filter((a) => a.status === 'accepted').length, 'Accepted', 'text-navy'], [esc, 'Escalated', 'text-amber-600']].map(([n, k, c]) => (
+        {[[open.filter((a) => a.status === 'new').length, 'New', 'text-red-600'], [open.filter((a) => a.status === 'accepted').length, 'Accepted', 'text-brand'], [esc, 'Escalated', 'text-amber-600']].map(([n, k, c]) => (
           <Card key={k} className="px-3 py-2.5 text-center"><div className={cls('text-2xl font-extrabold', c)}>{n}</div><div className="text-[11px] font-medium text-slate-500">{k}</div></Card>
         ))}
       </div>
       <div className="flex gap-2">
         {[['open', `Open (${open.length})`], ['done', `Resolved (${done.length})`]].map(([k, l]) => (
           <button key={k} type="button" onClick={() => setFilter(k)}
-            className={cls('rounded-full px-3.5 py-1.5 text-sm font-semibold transition', filter === k ? 'bg-navy text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200')}>{l}</button>
+            className={cls('rounded-full px-3.5 py-1.5 text-sm font-semibold transition', filter === k ? 'bg-brand text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200')}>{l}</button>
         ))}
       </div>
       {list.length === 0 && (
@@ -83,12 +91,12 @@ function AlertFeed({ me }) {
           <div className="text-sm text-slate-500">Use the Demo tab to create sample alerts.</div>
         </Card>
       )}
-      {list.map((a) => <AlertCard key={a.id} a={a} me={me} />)}
+      {list.map((a) => <AlertCard key={a.id} a={a} me={me} openCam={openCam} />)}
     </div>
   );
 }
 
-export function AlertCard({ a, me, compact }) {
+export function AlertCard({ a, me, compact, openCam }) {
   const { s, mutate, now } = useApp();
   const T = ALERT_TYPES[a.type];
   const P = PRI[T.pri];
@@ -128,18 +136,23 @@ export function AlertCard({ a, me, compact }) {
           <div className={cls('mt-3 grid gap-2', a.photo ? 'grid-cols-2' : 'grid-cols-1')}>
             {a.photo && (
               <button type="button" className="text-left" onClick={() => logView('Viewed Saathi Walk last-seen photo')}>
-                <NightPhoto cp={a.photo.cp} time={a.photo.time} className="aspect-video w-full" />
+                <NightPhoto cp={a.photo.cp} time={a.photo.time} cam={a.photo.cam} className="aspect-video w-full" />
                 <div className="mt-1 text-[11px] font-medium text-slate-500">Last seen · {cpShort(a.photo.cp)}, {fmtTime(a.photo.time)}</div>
               </button>
             )}
             <div>
-              <ClipPlayer cp={a.cp} onView={() => logView('Viewed 10 s clip')} label={a.photo ? '10 s clip' : '10 s clip · faces blurred'} />
+              <ClipPlayer cp={a.cp} cam={a.cam} onView={() => logView(`Viewed 10 s clip ${a.cam || ''}`)} label={a.photo ? '10 s clip' : '10 s clip · faces blurred'} />
               {a.photo && <div className="mt-1 text-[11px] font-medium text-slate-500">Faces blurred</div>}
             </div>
           </div>
         )}
 
         <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
+          {a.cam && openCam && (
+            <button type="button" onClick={() => openCam(a.cam)} className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-2 py-0.5 font-semibold text-white">
+              <span className={cls('h-1.5 w-1.5 rounded-full', s.cams[a.cam].status === 'online' ? 'bg-red-500 blink' : 'bg-slate-400')} />Live {a.cam}
+            </button>
+          )}
           <Badge className="bg-slate-100 text-slate-600"><Icon name="user" className="h-3 w-3" />Nearest: {assigned.name} ({distM(assigned, cp)} m)</Badge>
           {a.lights && <Badge className="bg-yellow-100 text-yellow-800"><Icon name="bulb" className="h-3 w-3" />Lights ON</Badge>}
           {a.status === 'new' && !a.escalated && <Badge className="bg-red-50 text-red-700"><Icon name="clock" className="h-3 w-3" />Escalates in {mmss(left)}</Badge>}
@@ -147,14 +160,14 @@ export function AlertCard({ a, me, compact }) {
 
         {a.speaker && (
           <div className="fade-up mt-3 flex items-start gap-2 rounded-xl bg-slate-900 p-3 text-sm text-white">
-            <Icon name="speaker" className="mt-0.5 h-4 w-4 text-saffron" />
+            <Icon name="speaker" className="mt-0.5 h-4 w-4 text-accent" />
             <span>"You are being recorded. Security is on the way."<span className="block text-[11px] text-slate-400">Played on area speaker at {fmtTime(a.speakerAt)}</span></span>
           </div>
         )}
 
         {a.status === 'accepted' && acc && (
-          <div className="fade-up mt-3 flex items-center gap-3 rounded-xl bg-blue-50 p-3 text-sm text-navy">
-            <span className="grid h-9 w-9 place-items-center rounded-full bg-navy text-white"><Icon name="nav" className="h-4 w-4" /></span>
+          <div className="fade-up mt-3 flex items-center gap-3 rounded-xl bg-brand-50 p-3 text-sm text-brand">
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-brand text-white"><Icon name="nav" className="h-4 w-4" /></span>
             <span className="flex-1"><b>{acc.name}</b> navigating to {cp.name}<span className="block text-xs text-slate-600">{a.dist} m · about {Math.max(1, Math.ceil(a.dist / 80))} min · accepted {fmtTime(a.acceptedAt)}</span></span>
           </div>
         )}
@@ -183,31 +196,34 @@ export function AlertCard({ a, me, compact }) {
 
 function StatusBadge({ a }) {
   if (a.status === 'resolved') return <Badge className="bg-emerald-100 text-emerald-700">Resolved</Badge>;
-  if (a.status === 'accepted') return <Badge className="bg-blue-100 text-navy">Accepted</Badge>;
+  if (a.status === 'accepted') return <Badge className="bg-brand-100 text-brand">Accepted</Badge>;
   return <Badge className="bg-red-600 text-white"><span className="h-1.5 w-1.5 rounded-full bg-white blink" />New</Badge>;
 }
 
-function MapTab({ me }) {
+function MapTab({ me, openCam }) {
   const { s } = useApp();
   const open = s.alerts.filter((a) => a.status !== 'resolved').sort(byPriority);
   const [sel, setSel] = useState(null);
+  const [showCams, setShowCams] = useState(true);
   const selected = open.find((a) => a.id === sel) || null;
   return (
     <div className="space-y-3 p-4 pb-8">
       <Card className="p-2">
-        <CampusMap alerts={s.alerts} guards={s.guards} walk={s.walk} selected={sel} onSelect={setSel} />
+        <CampusMap alerts={s.alerts} guards={s.guards} walk={s.walk} selected={sel} onSelect={setSel} showCams={showCams} cams={s.cams} onCam={openCam} />
         <div className="flex flex-wrap gap-x-3 gap-y-1 px-2 pb-1 pt-2 text-[11px] text-slate-600">
           <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-red-600" />Alert</span>
           <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-amber-500" />Warning</span>
-          <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-navy" />Guard</span>
-          <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-saffron" />Saathi Walk</span>
-          <span className="flex items-center gap-1"><span className="grid h-3 w-3 place-items-center rounded-full border border-navy text-[6px] font-bold text-navy">A</span>Checkpoint</span>
+          <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-blue-600" />Guard</span>
+          <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-[#C9A227]" />Saathi Walk</span>
+          <span className="flex items-center gap-1"><span className="grid h-3 w-3 place-items-center rounded border border-brand text-[6px] font-bold text-brand">A</span>Checkpoint</span>
+          <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-accent-dark" />Camera</span>
+          <span className="ml-auto flex items-center gap-1.5">Cameras <Toggle on={showCams} onChange={setShowCams} label="Show cameras" /></span>
         </div>
       </Card>
       {selected ? (
         <>
-          <SectionTitle right={<button type="button" className="text-xs font-semibold text-navy" onClick={() => setSel(null)}>Show all</button>}>Selected alert</SectionTitle>
-          <AlertCard a={selected} me={me} />
+          <SectionTitle right={<button type="button" className="text-xs font-semibold text-brand" onClick={() => setSel(null)}>Show all</button>}>Selected alert</SectionTitle>
+          <AlertCard a={selected} me={me} openCam={openCam} />
         </>
       ) : (
         <>
@@ -229,13 +245,46 @@ function MapTab({ me }) {
   );
 }
 
+function CamerasTab({ openCam }) {
+  const { s } = useApp();
+  const [zone, setZone] = useState('all');
+  const counts = { online: 0, offline: 0, tampered: 0 };
+  for (const c of Object.values(s.cams)) counts[c.status] += 1;
+  const alertCams = new Set(s.alerts.filter((a) => a.status !== 'resolved' && a.cam).map((a) => a.cam));
+  const zones = [['all', 'All'], ['alert', 'With alerts'], ['GATE', 'Gate'], ['B', 'Paths'], ['D', 'Hostel'], ['WALL', 'Wall']];
+  const list = CAMERAS.filter((c) => zone === 'all' || (zone === 'alert' ? alertCams.has(c.id) : c.cp === zone))
+    .sort((a, b) => Number(alertCams.has(b.id)) - Number(alertCams.has(a.id)) || (s.cams[a.id].status === 'online') - (s.cams[b.id].status === 'online'));
+  return (
+    <div className="space-y-3 p-4 pb-8">
+      <div className="grid grid-cols-3 gap-2">
+        {[['online', 'Live', 'text-emerald-600'], ['offline', 'Offline', 'text-slate-500'], ['tampered', 'Tampered', 'text-amber-600']].map(([k, l, c]) => (
+          <Card key={k} className="px-3 py-2.5 text-center"><div className={cls('text-2xl font-extrabold', c)}>{counts[k]}</div><div className="text-[11px] font-medium text-slate-500">{l}</div></Card>
+        ))}
+      </div>
+      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
+        {zones.map(([k, l]) => (
+          <button key={k} type="button" onClick={() => setZone(k)} className={cls('shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold', zone === k ? 'bg-brand text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200')}>{l}</button>
+        ))}
+      </div>
+      {list.length === 0 && <Card className="text-center text-sm text-slate-500">No cameras here.</Card>}
+      <div className="grid grid-cols-2 gap-2.5">
+        {list.map((c) => <CamTile key={c.id} camId={c.id} onOpen={openCam} highlight={alertCams.has(c.id)} />)}
+      </div>
+      <Card className="flex items-start gap-3 bg-brand-50 ring-brand-100">
+        <Icon name="eye" className="mt-0.5 h-5 w-5 text-brand" />
+        <p className="text-sm text-slate-700">Feeds show behaviour only. Faces are blurred, and every view is logged with your name.</p>
+      </Card>
+    </div>
+  );
+}
+
 function WalksTab() {
   const { s, now } = useApp();
   const w = s.walk;
   return (
     <div className="space-y-3 p-4 pb-8">
-      <Card className="flex items-start gap-3 bg-blue-50 ring-blue-100">
-        <Icon name="info" className="mt-0.5 h-5 w-5 text-navy" />
+      <Card className="flex items-start gap-3 bg-brand-50 ring-brand-100">
+        <Icon name="info" className="mt-0.5 h-5 w-5 text-brand" />
         <p className="text-sm text-slate-700">Names show here only because the student <b>opted in</b> to a Saathi Walk. Everyone else stays anonymous.</p>
       </Card>
       <Card className="p-2"><CampusMap alerts={[]} guards={s.guards} walk={w} /></Card>
@@ -267,9 +316,9 @@ function PriyaWalk({ w, now }) {
         : w.missing ? ['Checking in…', 'bg-amber-100 text-amber-800']
           : openA.length ? ['Follower alert', 'bg-violet-100 text-violet-700'] : ['On time', 'bg-emerald-100 text-emerald-700'];
   return (
-    <Card className="p-3 ring-2 ring-saffron/60">
+    <Card className="p-3 ring-2 ring-accent/60">
       <div className="flex items-center gap-3">
-        <span className="grid h-10 w-10 place-items-center rounded-full bg-saffron font-bold text-slate-900">P</span>
+        <span className="grid h-10 w-10 place-items-center rounded-full bg-accent font-bold text-slate-900">P</span>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-slate-900">Priya S. → {ROUTES[w.dest].dest}</div>
           <div className="text-xs text-slate-500">{w.phase === 'arrived' ? `Arrived ${fmtTime(w.arrivedAt)} · photos deleted` : `Last: ${cpShort(last.cp)} ${fmtTime(last.time)} · next: ${next ? cpShort(next.cp) : '-'}`}</div>
@@ -295,9 +344,10 @@ function DemoTab() {
   const triggers = [
     { k: 'wall', icon: 'fence', t: 'Wall crossing', d: 'Boundary Wall East', run: TRIGGERS.wall },
     { k: 'tailgate', icon: 'tailgate', t: 'Tailgating at gate', d: 'Main Gate, Lane 2', run: TRIGGERS.tailgate },
-    { k: 'tamper', icon: 'cameraOff', t: 'Camera tampered', d: 'Canteen Junction C-2', run: TRIGGERS.tamper },
+    { k: 'tamper', icon: 'cameraOff', t: 'Camera tampered', d: 'CAM-C2, Canteen', run: TRIGGERS.tamper },
     { k: 'lab', icon: 'cpu', t: 'Oscilloscope leaving lab', d: osc.holder ? `Issued to ${osc.holder}` : 'Not issued: lab + gate', run: (d) => equipmentLeaving(d, 'osc4') },
-    { k: 'visitor', icon: 'badge', t: 'Visitor in wrong zone', d: 'Seen near Hostel D', run: visitorWrongZone },
+    { k: 'visitor', icon: 'badge', t: 'Visitor in wrong zone', d: 'Seen near Girls Hostel', run: visitorWrongZone },
+    { k: 'camoffline', icon: 'video', t: 'Camera goes offline', d: 'CAM-W2, east wall', run: TRIGGERS.camoffline },
   ];
   return (
     <div className="space-y-3 p-4 pb-8">
@@ -305,7 +355,7 @@ function DemoTab() {
         <div className="grid grid-cols-2 gap-2">
           {triggers.map((x) => (
             <button key={x.k} type="button" onClick={() => mutate(x.run)}
-              className="flex flex-col items-start gap-2 rounded-2xl bg-white p-3 text-left shadow-sm ring-1 ring-slate-200 transition hover:ring-navy active:scale-[.98]">
+              className="flex flex-col items-start gap-2 rounded-2xl bg-white p-3 text-left shadow-sm ring-1 ring-slate-200 transition hover:ring-brand active:scale-[.98]">
               <span className="grid h-9 w-9 place-items-center rounded-xl bg-red-50 text-red-600"><Icon name={x.icon} className="h-5 w-5" /></span>
               <span className="text-sm font-semibold leading-tight text-slate-900">{x.t}</span>
               <span className="text-[11px] text-slate-500">{x.d}</span>
@@ -325,6 +375,7 @@ function DemoTab() {
           <li>Alerts not accepted in 2 min go to the Security Head.</li>
           <li>RFID instrument at lab door + not issued → alert lab door and Main Gate.</li>
           <li>Visitor pass zone checked by anonymous cameras.</li>
+          <li>Camera offline or tampered → nearest guard checks it; resolving brings it back online.</li>
         </ul>
       </Card>
     </div>

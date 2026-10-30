@@ -1,11 +1,13 @@
 // Student app: Home, My ID, Saathi Walk, Lab (LabLedger), Profile.
 import { useState } from 'react';
 import {
-  COLLEGE, CP, DISPUTE_REASONS, MIN, QR_PERIOD, ROUTES, STUDENT, cls, cpShort, fmtDay, fmtTime, qrCode,
+  CAMERAS, COLLEGE, CP, DISPUTE_REASONS, MIN, QR_PERIOD, ROUTES, STUDENT, camsAt, cls, cpShort, fmtDay, fmtTime, qrCode,
 } from './data.js';
+import CampusMap from './map.jsx';
+import { CameraFeed } from './cctv.jsx';
 import {
   answerOk, cancelSos, follower, gateScan, goMissing, guardById, issueItems, lastPassed, nextStep,
-  passNext, raiseDispute, returnItem, sos, startWalk, toast, useApp,
+  passNext, raiseDispute, reportDarkSpot, returnItem, sos, startWalk, toast, useApp,
 } from './store.js';
 import {
   Avatar, Badge, BottomNav, Btn, Card, DemoPanel, Icon, LiveDot, NightPhoto, QR, ResultSheet, Ring,
@@ -31,8 +33,8 @@ export default function StudentApp() {
       </div>
 
       {showFollower && (
-        <div className="shake absolute inset-x-3 top-14 z-40 flex items-start gap-3 rounded-2xl bg-slate-900 p-3.5 text-white shadow-2xl ring-2 ring-saffron">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-saffron text-slate-900"><Icon name="vibrate" className="h-5 w-5" /></span>
+        <div className="shake absolute inset-x-3 top-2 z-40 flex items-start gap-3 rounded-2xl bg-slate-900 p-3.5 text-white shadow-2xl ring-2 ring-accent">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent text-slate-900"><Icon name="vibrate" className="h-5 w-5" /></span>
           <div className="text-sm">
             <div className="font-semibold">Someone has been behind you for 3 checkpoints.</div>
             <div className="mt-0.5 text-slate-300">Guard {guardById(s, w.guard).name} notified. Keep walking to a lit area.</div>
@@ -72,16 +74,16 @@ function Home({ go }) {
   const mine = s.issued.filter((i) => i.status === 'issued');
   return (
     <div className="pb-28">
-      <div className="rounded-b-[32px] bg-gradient-to-br from-navy to-navy-light px-5 pb-20 pt-5 text-white">
+      <div className="rounded-b-[32px] bg-gradient-to-br from-brand to-[#3D0D08] px-5 pb-20 pt-5 text-white">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-sm text-blue-200">{greet},</div>
-            <div className="text-2xl font-extrabold">{STUDENT.first} 👋</div>
+            <div className="text-sm text-white/65">{greet},</div>
+            <div className="font-serif text-[26px] font-semibold">{STUDENT.first} 👋</div>
           </div>
           <button type="button" onClick={() => go('profile')} aria-label="Profile"><Avatar size={46} /></button>
         </div>
-        <div className="mt-3 flex items-center gap-2 text-xs text-blue-100">
-          <Icon name="shieldCheck" className="h-4 w-4 text-saffron" /> Kavach protected · {COLLEGE}
+        <div className="mt-3 flex items-center gap-2 text-xs text-white/80">
+          <Icon name="shieldCheck" className="h-4 w-4 text-accent" /> Kavach protected · {COLLEGE}
         </div>
       </div>
 
@@ -100,7 +102,7 @@ function Home({ go }) {
         </Card>
 
         {w && w.phase === 'active' && (
-          <button type="button" onClick={() => go('walk')} className="fade-up flex w-full items-center gap-3 rounded-2xl bg-saffron p-4 text-left text-slate-900 shadow-sm">
+          <button type="button" onClick={() => go('walk')} className="fade-up flex w-full items-center gap-3 rounded-2xl bg-accent p-4 text-left text-slate-900 shadow-sm">
             <span className="grid h-11 w-11 place-items-center rounded-2xl bg-white/40"><Icon name="walk" /></span>
             <span className="flex-1">
               <span className="block font-bold">Saathi Walk in progress</span>
@@ -112,7 +114,7 @@ function Home({ go }) {
 
         <div className="grid grid-cols-2 gap-3">
           {[
-            { id: 'id', icon: 'qr', t: 'My ID', d: 'Rotating QR pass', c: 'bg-blue-100 text-navy' },
+            { id: 'id', icon: 'qr', t: 'My ID', d: 'Rotating QR pass', c: 'bg-brand-100 text-brand' },
             { id: 'walk', icon: 'moon', t: 'Saathi Walk', d: 'Night escort home', c: 'bg-amber-100 text-amber-700' },
             { id: 'lab', icon: 'flask', t: 'LabLedger', d: `${mine.length} item${mine.length === 1 ? '' : 's'} with you`, c: 'bg-violet-100 text-violet-700' },
             { id: 'profile', icon: 'eye', t: 'My data', d: 'What we store', c: 'bg-emerald-100 text-emerald-700' },
@@ -125,16 +127,16 @@ function Home({ go }) {
           ))}
         </div>
 
-        <Card className="flex items-start gap-3 bg-gradient-to-br from-blue-50 to-white">
-          <Icon name="shield" className="mt-0.5 h-6 w-6 text-navy" />
+        <Card className="flex items-start gap-3 bg-gradient-to-br from-brand-50 to-white">
+          <Icon name="shield" className="mt-0.5 h-6 w-6 text-brand" />
           <div>
-            <div className="font-bold text-slate-900">Identify at the doors, anonymous in between.</div>
+            <div className="font-serif text-[17px] font-semibold text-slate-900">Identify at the doors, <i>anonymous in between.</i></div>
             <p className="mt-0.5 text-sm text-slate-600">Cameras between checkpoints watch for danger, never for names.</p>
           </div>
         </Card>
 
         <div>
-          <SectionTitle right={<button type="button" className="text-xs font-semibold text-navy" onClick={() => go('id')}>See all</button>}>Recent activity</SectionTitle>
+          <SectionTitle right={<button type="button" className="text-xs font-semibold text-brand" onClick={() => go('id')}>See all</button>}>Recent activity</SectionTitle>
           <Card className="divide-y divide-slate-100 p-0">
             {s.gate.log.slice(0, 3).map((l) => <LogRow key={l.id} l={l} now={now} />)}
           </Card>
@@ -196,15 +198,15 @@ function MyId() {
       <div className="flex min-h-full flex-col pb-24">
         <ScreenHeader title="My ID" sub="Your campus pass" />
         <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
-          <div className="mb-2 grid h-14 w-14 place-items-center rounded-2xl bg-blue-100 text-navy"><Icon name="lock" className="h-7 w-7" /></div>
-          <h2 className="text-xl font-bold text-slate-900">Your ID is locked</h2>
+          <div className="mb-2 grid h-14 w-14 place-items-center rounded-2xl bg-brand-100 text-brand"><Icon name="lock" className="h-7 w-7" /></div>
+          <h2 className="font-serif text-2xl font-semibold text-slate-900">Your ID is locked</h2>
           <p className="mt-1 text-sm text-slate-500">Only you can open your pass.</p>
           <button type="button" onClick={unlock} disabled={lock === 'scanning'}
             className="relative mt-8 grid h-36 w-36 place-items-center rounded-full bg-white shadow-lg ring-1 ring-slate-200 transition active:scale-95">
-            {lock === 'scanning' && <span className="pulse-ring-html absolute inset-0 rounded-full bg-blue-200" />}
+            {lock === 'scanning' && <span className="pulse-ring-html absolute inset-0 rounded-full bg-brand-100" />}
             <span className="relative">
               <Icon name="fingerprint" className="h-20 w-20 text-slate-300" sw={1.5} />
-              {lock === 'scanning' && <span className="fp-fill absolute inset-0 text-navy"><Icon name="fingerprint" className="h-20 w-20" sw={1.5} /></span>}
+              {lock === 'scanning' && <span className="fp-fill absolute inset-0 text-brand"><Icon name="fingerprint" className="h-20 w-20" sw={1.5} /></span>}
             </span>
           </button>
           <Btn className="mt-8 w-full max-w-[260px]" icon="fingerprint" onClick={unlock} disabled={lock === 'scanning'}>
@@ -223,12 +225,12 @@ function MyId() {
       } />
       <div className="space-y-4 px-4 pt-4">
         <div className="fade-up overflow-hidden rounded-3xl bg-white shadow-md ring-1 ring-slate-200/70">
-          <div className="flex items-center gap-3 bg-gradient-to-r from-navy to-navy-light p-4 text-white">
+          <div className="flex items-center gap-3 bg-gradient-to-r from-brand to-[#3D0D08] p-4 text-white">
             <Avatar size={56} />
             <div className="min-w-0">
-              <div className="text-lg font-bold">{STUDENT.name}</div>
-              <div className="text-sm text-blue-100">{STUDENT.id}</div>
-              <div className="truncate text-xs text-blue-200">{STUDENT.dept} · {STUDENT.year}</div>
+              <div className="font-serif text-xl font-semibold">{STUDENT.name}</div>
+              <div className="text-sm text-white/80">{STUDENT.id}</div>
+              <div className="truncate text-xs text-white/65">{STUDENT.dept} · {STUDENT.year}</div>
             </div>
           </div>
           <div className="flex flex-col items-center px-4 pb-4 pt-5">
@@ -302,8 +304,8 @@ function RouteSteps({ steps, now, live }) {
           <li key={st.cp} className="relative flex gap-3 pb-5 last:pb-0">
             {!last && <span className={cls('absolute left-[17px] top-9 h-[calc(100%-28px)] w-0.5', passed ? 'bg-emerald-400' : 'bg-slate-200')} />}
             <span className={cls('relative z-[1] grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-extrabold',
-              passed ? 'bg-emerald-500 text-white' : missed ? 'bg-red-600 text-white' : isNext ? 'bg-saffron text-slate-900' : 'bg-slate-100 text-slate-500')}>
-              {isNext && !missed && <span className="pulse-soft absolute inset-0 rounded-full bg-saffron" />}
+              passed ? 'bg-emerald-500 text-white' : missed ? 'bg-red-600 text-white' : isNext ? 'bg-accent text-slate-900' : 'bg-slate-100 text-slate-500')}>
+              {isNext && !missed && <span className="pulse-soft absolute inset-0 rounded-full bg-accent" />}
               <span className="relative">{passed ? <Icon name="check" className="h-4 w-4" sw={3} /> : (cp.tag.length === 1 ? cp.tag : <Icon name="pin" className="h-4 w-4" />)}</span>
             </span>
             <div className="min-w-0 flex-1 pt-0.5">
@@ -318,9 +320,14 @@ function RouteSteps({ steps, now, live }) {
                   {!passed && !missed && (isNext ? `Expected by ${fmtTime(expected)} · ${st.mins} min` : `About ${st.mins} min`)}
                 </div>
               )}
-              {live && passed && (
-                <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600"><Icon name="camera" className="h-3 w-3" />Photo {fmtTime(st.time)}</span>
-              )}
+              <div className="mt-1 flex flex-wrap gap-1">
+                {live && passed && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600"><Icon name="camera" className="h-3 w-3" />Photo {fmtTime(st.time)} · {camsAt(st.cp)[0]}</span>
+                )}
+                {(!live || !passed) && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700"><Icon name="video" className="h-3 w-3" />{camsAt(st.cp).length} camera{camsAt(st.cp).length === 1 ? '' : 's'} watching, lit path</span>
+                )}
+              </div>
             </div>
           </li>
         );
@@ -334,39 +341,59 @@ function WalkIntro() {
   const [pick, setPick] = useState(false);
   const [dest, setDest] = useState('D');
   const [share, setShare] = useState(false);
+  const [report, setReport] = useState(false);
   const r = ROUTES[dest];
   const total = r.steps.reduce((a, b) => a + b.mins, 0);
   return (
     <div className="pb-28">
       <ScreenHeader title="Saathi Walk" sub="Night escort, checkpoint to checkpoint" />
       <div className="space-y-4 px-4 pt-4">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0f1d4a] to-navy p-6 text-white shadow-md">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand to-[#3D0D08] p-6 text-white shadow-md">
           {[[30, 20], [80, 40], [250, 26], [290, 60], [200, 14], [140, 50]].map(([x, y]) => (
             <span key={x} className="blink absolute h-1 w-1 rounded-full bg-white" style={{ left: x, top: y, animationDelay: `${x * 7}ms` }} />
           ))}
-          <Icon name="moon" className="h-10 w-10 text-saffron" />
-          <h2 className="mt-3 text-2xl font-extrabold leading-tight">Walking back late?<br />A Saathi walks with you.</h2>
-          <p className="mt-2 text-sm text-blue-100">Guards see you only at checkpoints. Photos are deleted when you reach.</p>
+          <Icon name="moon" className="h-10 w-10 text-accent" />
+          <h2 className="mt-3 font-serif text-[26px] font-semibold leading-tight">Walking back late?<br />A Saathi walks with you.</h2>
+          <p className="mt-2 text-sm text-white/80">Guards see you only at checkpoints. Photos are deleted when you reach.</p>
           <Btn v="accent" size="lg" className="mt-5 w-full text-lg" icon="walk" onClick={() => setPick(true)}>Help me get home</Btn>
         </div>
         <div className="grid grid-cols-3 gap-2 text-center">
           {[['heart', 'Opt-in only'], ['camera', 'Photos at checkpoints'], ['trash', 'Deleted on arrival']].map(([ic, t]) => (
-            <Card key={t} className="px-2 py-3"><Icon name={ic} className="mx-auto h-5 w-5 text-navy" /><div className="mt-1.5 text-xs font-semibold text-slate-700">{t}</div></Card>
+            <Card key={t} className="px-2 py-3"><Icon name={ic} className="mx-auto h-5 w-5 text-brand" /><div className="mt-1.5 text-xs font-semibold text-slate-700">{t}</div></Card>
           ))}
         </div>
         <Card className="flex items-center gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-100 text-emerald-700"><Icon name="users" /></span>
-          <div className="text-sm text-slate-600"><b className="text-slate-900">3 guards on duty</b> tonight. Sunita is near Hostel D.</div>
+          <div className="text-sm text-slate-600"><b className="text-slate-900">3 guards on duty</b> tonight. Sunita is near the Girls Hostel.</div>
         </Card>
+        <Card className="flex items-center gap-3">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-brand"><Icon name="video" /></span>
+          <div className="flex-1 text-sm text-slate-600"><b className="text-slate-900">{CAMERAS.length} cameras</b> cover the walk routes. They watch behaviour, not names.</div>
+        </Card>
+        <Btn v="outline" className="w-full" icon="bulb" onClick={() => setReport(true)}>Report a dark spot or broken camera</Btn>
       </div>
+
+      {report && (
+        <Sheet title="Where is it?" onClose={() => setReport(false)}>
+          <p className="-mt-1 mb-3 text-sm text-slate-500">Maintenance and security get it right away. Your name is not shared.</p>
+          <div className="grid grid-cols-2 gap-2">
+            {Object.values(CP).map((c) => (
+              <button key={c.id} type="button" onClick={() => { mutate((d) => reportDarkSpot(d, c.id)); setReport(false); }}
+                className="flex items-center gap-2 rounded-2xl bg-slate-50 p-3 text-left text-sm font-semibold text-slate-800 ring-1 ring-slate-200 hover:ring-brand">
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white text-xs font-extrabold text-brand ring-1 ring-brand/30">{c.tag}</span>{c.name}
+              </button>
+            ))}
+          </div>
+        </Sheet>
+      )}
 
       {pick && (
         <Sheet title="Where are you going?" onClose={() => setPick(false)} tall>
           <div className="space-y-2">
             {Object.entries(ROUTES).map(([k, rt]) => (
               <button key={k} type="button" onClick={() => setDest(k)}
-                className={cls('flex w-full items-center gap-3 rounded-2xl p-3 text-left ring-2 transition', dest === k ? 'bg-blue-50 ring-navy' : 'bg-white ring-slate-200')}>
-                <span className={cls('grid h-10 w-10 place-items-center rounded-xl', dest === k ? 'bg-navy text-white' : 'bg-slate-100 text-slate-500')}><Icon name={k === 'D' ? 'home' : 'logout'} /></span>
+                className={cls('flex w-full items-center gap-3 rounded-2xl p-3 text-left ring-2 transition', dest === k ? 'bg-brand-50 ring-brand' : 'bg-white ring-slate-200')}>
+                <span className={cls('grid h-10 w-10 place-items-center rounded-xl', dest === k ? 'bg-brand text-white' : 'bg-slate-100 text-slate-500')}><Icon name={k === 'D' ? 'home' : 'logout'} /></span>
                 <span className="flex-1"><span className="block font-semibold text-slate-900">{rt.dest}</span><span className="block text-xs text-slate-500">{rt.sub}</span></span>
                 <span className="text-sm font-bold text-slate-700">{rt.steps.reduce((a, b) => a + b.mins, 0)} min</span>
               </button>
@@ -374,7 +401,7 @@ function WalkIntro() {
           </div>
           <div className="mt-5 flex items-center justify-between">
             <h4 className="text-sm font-bold text-slate-900">Your route</h4>
-            <span className="text-xs text-slate-500">Starts at Library (A), where you are</span>
+            <span className="text-xs text-slate-500">Starts at the Library (A)</span>
           </div>
           <div className="mt-3 rounded-2xl bg-slate-50 p-4"><RouteSteps steps={r.steps} now={now} /></div>
           <div className="mt-4 flex items-center justify-between rounded-2xl bg-slate-50 p-3">
@@ -417,21 +444,21 @@ function WalkActive() {
     <div className="pb-32">
       <ScreenHeader title="Saathi Walk" sub={`To ${r.dest}`} right={<Badge className="bg-emerald-100 text-emerald-700"><LiveDot />LIVE</Badge>} />
       <div className="space-y-3 px-4 pt-4">
-        <div className="rounded-3xl bg-gradient-to-br from-[#0f1d4a] to-navy p-4 text-white shadow-md">
+        <div className="rounded-3xl bg-gradient-to-br from-brand to-[#3D0D08] p-4 text-white shadow-md">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs text-blue-200">Walking to</div>
+              <div className="text-xs text-white/65">Walking to</div>
               <div className="text-lg font-bold">{r.dest}</div>
             </div>
             <div className="text-right">
-              <div className="text-xs text-blue-200">Started</div>
+              <div className="text-xs text-white/65">Started</div>
               <div className="font-semibold">{fmtTime(w.startedAt)}</div>
             </div>
           </div>
           <div className="mt-3 flex items-center gap-2 rounded-2xl bg-white/10 p-2.5 text-sm">
-            <span className="grid h-8 w-8 place-items-center rounded-full bg-saffron font-bold text-slate-900">{g.name[0]}</span>
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-accent font-bold text-slate-900">{g.name[0]}</span>
             <span className="flex-1">Guard on watch: <b>{g.name}</b></span>
-            <Icon name="phone" className="h-4 w-4 text-blue-200" />
+            <Icon name="phone" className="h-4 w-4 text-white/65" />
           </div>
         </div>
 
@@ -469,10 +496,10 @@ function WalkActive() {
         )}
 
         <Card className="flex items-center gap-3">
-          <NightPhoto cp={last.cp} time={last.time} className="h-16 w-24" />
+          <NightPhoto cp={last.cp} time={last.time} cam={camsAt(last.cp)[0]} className="h-16 w-24" />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900"><Icon name="camera" className="h-4 w-4 text-navy" />Photo captured at checkpoint {cpShort(last.cp)}</div>
-            <div className="text-xs text-slate-500">{fmtTime(last.time, true)} · deleted when you arrive</div>
+            <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900"><Icon name="camera" className="h-4 w-4 text-brand" />Photo captured at checkpoint {cpShort(last.cp)}</div>
+            <div className="text-xs text-slate-500">{fmtTime(last.time, true)} · {camsAt(last.cp)[0]} · deleted when you arrive</div>
           </div>
         </Card>
 
@@ -528,18 +555,18 @@ function AreYouOk() {
   const next = nextStep(w);
   const g = guardById(s, w.guard);
   return (
-    <div className="fade-in absolute inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-b from-[#0f1d4a] to-slate-950 px-6 text-center text-white">
-      <Ring value={left} max={30} size={120} stroke={8} color="#F59E0B" track="rgba(255,255,255,.15)">
-        <div><div className="text-4xl font-black tabular-nums">{left}</div><div className="text-[10px] uppercase tracking-wider text-blue-200">seconds</div></div>
+    <div className="fade-in absolute inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-b from-[#3D0D08] to-slate-950 px-6 text-center text-white">
+      <Ring value={left} max={30} size={120} stroke={8} color="#BFA682" track="rgba(255,255,255,.15)">
+        <div><div className="text-4xl font-black tabular-nums">{left}</div><div className="text-[10px] uppercase tracking-wider text-white/65">seconds</div></div>
       </Ring>
-      <h2 className="mt-6 text-4xl font-black">Are you OK?</h2>
-      <p className="mt-2 text-blue-100">You have not reached {CP[next.cp].name} ({cpShort(next.cp)}) on time.</p>
+      <h2 className="mt-6 font-serif text-[40px] font-semibold">Are you <i>OK?</i></h2>
+      <p className="mt-2 text-white/80">You have not reached {CP[next.cp].name} ({cpShort(next.cp)}) on time.</p>
       <div className="mt-8 grid w-full max-w-[300px] gap-3">
         <Btn v="success" size="lg" className="h-16 text-lg" icon="check" onClick={() => mutate(answerOk)}>I'm OK</Btn>
         <Btn v="danger" size="lg" className="h-16 text-lg" icon="siren" onClick={() => mutate(sos)}>Help</Btn>
       </div>
-      <p className="mt-6 text-xs text-blue-200">No answer? Guard {g.name} gets your last photo and location.</p>
-      <button type="button" className="mt-3 text-xs font-semibold text-saffron underline" onClick={() => mutate((d) => { d.walk.missing.until = Date.now(); })}>Demo: skip timer</button>
+      <p className="mt-6 text-xs text-white/65">No answer? Guard {g.name} gets your last photo and location.</p>
+      <button type="button" className="mt-3 text-xs font-semibold text-accent underline" onClick={() => mutate((d) => { d.walk.missing.until = Date.now(); })}>Demo: skip timer</button>
     </div>
   );
 }
@@ -555,7 +582,7 @@ function WalkArrived() {
         <div className="pop grid h-24 w-24 place-items-center rounded-full bg-emerald-100 text-emerald-600 ring-8 ring-emerald-50">
           <Icon name="home" className="h-11 w-11" />
         </div>
-        <h2 className="mt-5 text-2xl font-extrabold text-slate-900">You reached safely.</h2>
+        <h2 className="mt-5 font-serif text-[26px] font-semibold text-slate-900">You reached <i>safely.</i></h2>
         <p className="mt-1 flex items-center gap-1.5 font-semibold text-emerald-700"><Icon name="trash" className="h-4 w-4" />All walk photos deleted.</p>
         <p className="mt-1 text-sm text-slate-500">{ROUTES[w.dest].dest} · {fmtTime(w.arrivedAt)}</p>
       </div>
@@ -569,7 +596,7 @@ function WalkArrived() {
           <div className="grid grid-cols-4 gap-2">
             {w.steps.map((st) => (
               <div key={st.cp} className="text-center">
-                <NightPhoto cp={st.cp} time={st.time || w.arrivedAt} deleted className="aspect-[4/3] w-full" />
+                <NightPhoto cp={st.cp} time={st.time || w.arrivedAt} cam={camsAt(st.cp)[0]} deleted className="aspect-[4/3] w-full" />
                 <div className="mt-1 text-[11px] font-semibold text-slate-600">{cpShort(st.cp)}</div>
               </div>
             ))}
@@ -608,11 +635,11 @@ function Lab() {
       <ScreenHeader title="LabLedger" sub="Electronics Lab · borrow and return" />
       <div className="space-y-4 px-4 pt-4">
         <button type="button" onClick={() => setStage('scanShelf')}
-          className="flex w-full items-center gap-4 rounded-3xl bg-gradient-to-br from-navy to-navy-light p-5 text-left text-white shadow-md active:scale-[.99]">
+          className="flex w-full items-center gap-4 rounded-3xl bg-gradient-to-br from-brand to-[#3D0D08] p-5 text-left text-white shadow-md active:scale-[.99]">
           <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/15"><Icon name="scan" className="h-7 w-7" /></span>
           <span className="flex-1">
             <span className="block text-lg font-bold">Scan QR at shelf</span>
-            <span className="block text-sm text-blue-100">Pick items, the shelf weighs and counts them</span>
+            <span className="block text-sm text-white/80">Pick items, the shelf weighs and counts them</span>
           </span>
           <Icon name="chevR" />
         </button>
@@ -623,11 +650,11 @@ function Lab() {
           <div className="space-y-2">
             {mine.map((is) => (
               <Card key={is.id} className="fade-up flex items-center gap-3 p-3">
-                <span className={cls('grid h-11 w-11 place-items-center rounded-xl', is.rfid ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-navy')}><Icon name={is.rfid ? 'cpu' : 'box'} /></span>
+                <span className={cls('grid h-11 w-11 place-items-center rounded-xl', is.rfid ? 'bg-violet-100 text-violet-700' : 'bg-brand-100 text-brand')}><Icon name={is.rfid ? 'cpu' : 'box'} /></span>
                 <div className="min-w-0 flex-1">
                   <div className="font-semibold text-slate-900">{is.qty} × {is.name}</div>
                   <div className="text-xs text-slate-500">{fmtDay(is.time, now)}, {fmtTime(is.time)}{is.rfid ? ' · RFID tagged' : ''}</div>
-                  <button type="button" className="text-xs font-semibold text-slate-400 hover:text-navy" onClick={() => setDispute(`${is.qty} × ${is.name} (${is.id})`)}>
+                  <button type="button" className="text-xs font-semibold text-slate-400 hover:text-brand" onClick={() => setDispute(`${is.qty} × ${is.name} (${is.id})`)}>
                     {disputed(`${is.qty} × ${is.name} (${is.id})`) ? 'Dispute open' : 'Dispute'}
                   </button>
                 </div>
@@ -685,7 +712,7 @@ function Lab() {
           <div className="space-y-2">
             {s.inventory.map((it) => (
               <div key={it.id} className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
-                <span className={cls('grid h-10 w-10 place-items-center rounded-xl', it.rfid ? 'bg-violet-100 text-violet-700' : 'bg-white text-navy ring-1 ring-slate-200')}><Icon name={it.rfid ? 'cpu' : 'box'} className="h-5 w-5" /></span>
+                <span className={cls('grid h-10 w-10 place-items-center rounded-xl', it.rfid ? 'bg-violet-100 text-violet-700' : 'bg-white text-brand ring-1 ring-slate-200')}><Icon name={it.rfid ? 'cpu' : 'box'} className="h-5 w-5" /></span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold text-slate-900">{it.name}</div>
                   <div className="text-xs text-slate-500">{it.rfid ? (it.holder ? `Issued to ${it.holder}` : `RFID ${it.rfid} · ${it.bench}`) : `${it.stock} in stock`}</div>
@@ -699,7 +726,7 @@ function Lab() {
               </div>
             ))}
           </div>
-          <div className="mt-4 flex items-center gap-3 rounded-2xl bg-blue-50 p-3 text-sm text-navy">
+          <div className="mt-4 flex items-center gap-3 rounded-2xl bg-brand-50 p-3 text-sm text-brand">
             <Icon name="activity" className="h-5 w-5" />
             <span className="flex-1">Weight sensor: <b className="tabular-nums">{grams.toFixed(1)} g</b> removed</span>
             <span className="font-semibold">{count} item{count === 1 ? '' : 's'}</span>
@@ -748,11 +775,11 @@ function DisputeSheet({ label, onClose }) {
       <div className="mt-3 flex flex-wrap gap-2">
         {DISPUTE_REASONS.map((r) => (
           <button key={r} type="button" onClick={() => setReason(r)}
-            className={cls('rounded-full px-3 py-2 text-sm font-medium ring-1 transition', reason === r ? 'bg-navy text-white ring-navy' : 'bg-white text-slate-700 ring-slate-300')}>{r}</button>
+            className={cls('rounded-full px-3 py-2 text-sm font-medium ring-1 transition', reason === r ? 'bg-brand text-white ring-brand' : 'bg-white text-slate-700 ring-slate-300')}>{r}</button>
         ))}
       </div>
       <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="Add details (optional)"
-        className="mt-3 w-full rounded-2xl border-0 bg-slate-50 p-3 text-sm ring-1 ring-slate-200 focus:ring-2 focus:ring-navy" />
+        className="mt-3 w-full rounded-2xl border-0 bg-slate-50 p-3 text-sm ring-1 ring-slate-200 focus:ring-2 focus:ring-brand" />
       <p className="mt-2 text-xs text-slate-500">Reviewed by the Lab In-charge and a student committee member within 3 days.</p>
       <Btn className="mt-3 w-full" disabled={!reason} onClick={() => { mutate((d) => raiseDispute(d, label, reason + (text ? `: ${text}` : ''))); onClose(); }}>Send dispute</Btn>
     </Sheet>
@@ -773,11 +800,11 @@ function Profile() {
   ];
   return (
     <div className="pb-28">
-      <div className="rounded-b-[32px] bg-gradient-to-br from-navy to-navy-light px-5 pb-6 pt-6 text-center text-white">
+      <div className="rounded-b-[32px] bg-gradient-to-br from-brand to-[#3D0D08] px-5 pb-6 pt-6 text-center text-white">
         <Avatar size={84} className="mx-auto ring-4" />
-        <h2 className="mt-3 text-xl font-bold">{STUDENT.name}</h2>
-        <p className="text-sm text-blue-100">{STUDENT.dept} · {STUDENT.year}</p>
-        <Badge className="mt-2 bg-white/15 text-white"><Icon name="shieldCheck" className="h-3.5 w-3.5 text-saffron" />Verified student</Badge>
+        <h2 className="mt-3 font-serif text-2xl font-semibold">{STUDENT.name}</h2>
+        <p className="text-sm text-white/80">{STUDENT.dept} · {STUDENT.year}</p>
+        <Badge className="mt-2 bg-white/15 text-white"><Icon name="shieldCheck" className="h-3.5 w-3.5 text-accent" />Verified student</Badge>
       </div>
       <div className="space-y-4 px-4 pt-4">
         <Card className="divide-y divide-slate-100 p-0">
@@ -796,7 +823,7 @@ function Profile() {
             { ic: 'refresh', t: 'Reset demo', d: 'Restore all mock data', go: reset },
           ].map((x) => (
             <button key={x.t} type="button" onClick={x.go} className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-slate-50">
-              <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-navy"><Icon name={x.ic} className="h-4 w-4" /></span>
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-50 text-brand"><Icon name={x.ic} className="h-4 w-4" /></span>
               <span className="flex-1"><span className="block text-sm font-semibold text-slate-900">{x.t}</span><span className="block text-xs text-slate-500">{x.d}</span></span>
               <Icon name="chevR" className="h-4 w-4 text-slate-400" />
             </button>
@@ -832,16 +859,25 @@ function MyData({ onBack }) {
     <div className="pb-28">
       <ScreenHeader title="My data" sub="Exactly what Kavach keeps about you" onBack={onBack} />
       <div className="space-y-4 px-4 pt-4">
-        <div className="rounded-3xl bg-gradient-to-br from-navy to-navy-light p-5 text-white shadow-md">
-          <div className="flex items-center gap-2 text-saffron"><Icon name="shieldCheck" /><span className="text-sm font-bold uppercase tracking-wider">Our privacy promise</span></div>
+        <div className="rounded-3xl bg-gradient-to-br from-brand to-[#3D0D08] p-5 text-white shadow-md">
+          <div className="flex items-center gap-2 text-accent"><Icon name="shieldCheck" /><span className="text-sm font-bold uppercase tracking-wider">Our privacy promise</span></div>
           <ul className="mt-3 space-y-2.5">
             {promise.map(([b, t]) => (
               <li key={b} className="flex gap-2.5 text-sm">
-                <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-emerald-400 text-navy"><Icon name="check" className="h-3 w-3" sw={3.5} /></span>
-                <span><b>{b}</b> <span className="text-blue-100">{t}</span></span>
+                <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-emerald-400 text-brand"><Icon name="check" className="h-3 w-3" sw={3.5} /></span>
+                <span><b>{b}</b> <span className="text-white/80">{t}</span></span>
               </li>
             ))}
           </ul>
+        </div>
+
+        <div>
+          <SectionTitle>What a campus camera sees</SectionTitle>
+          <Card className="p-3">
+            <CameraFeed camId="CAM-B1" />
+            <p className="mt-2 text-sm text-slate-600">Faces are blurred. People get a temporary number like <b>#12 walking</b>, never a name. {CAMERAS.length} cameras, all shown below.</p>
+            <div className="mt-2 overflow-hidden rounded-xl ring-1 ring-slate-200"><CampusMap showCams cams={s.cams} showGuards={false} /></div>
+          </Card>
         </div>
 
         <div>
@@ -851,7 +887,7 @@ function MyData({ onBack }) {
               <div key={k} className="px-4 py-3">
                 <div className="flex items-start justify-between gap-2">
                   <span className="text-sm font-semibold text-slate-900">{k}</span>
-                  <Badge className="shrink-0 bg-blue-50 text-navy"><Icon name="clock" className="h-3 w-3" />{keep}</Badge>
+                  <Badge className="shrink-0 bg-brand-50 text-brand"><Icon name="clock" className="h-3 w-3" />{keep}</Badge>
                 </div>
                 <div className="mt-0.5 text-xs text-slate-500">{why}</div>
               </div>

@@ -1,4 +1,5 @@
 // Mock data, constants and small helpers. Everything here is fake demo data.
+import { CAMERAS, CHECKPOINTS, GUARD_POSTS, camsAt } from './campus.js';
 
 export const MIN = 60 * 1000;
 export const HOUR = 60 * MIN;
@@ -12,35 +13,27 @@ export const STUDENT = {
   dept: 'Electronics & Communication',
   year: '3rd year',
   phone: '+91 98450 21045',
-  hostel: 'Girls Hostel D, Room 214',
+  hostel: 'Girls Hostel, Room 214',
   blood: 'B+',
 };
 
-export const COLLEGE = 'Demo College of Engineering';
+export const COLLEGE = 'KLE Technological University';
+export const COLLEGE_SHORT = 'KLE Tech, Hubballi';
 
-// Campus checkpoints. x/y are positions on the 360x300 illustrated map.
-export const CP = {
-  GATE: { id: 'GATE', name: 'Main Gate', tag: 'G', x: 180, y: 278 },
-  A: { id: 'A', name: 'Library', tag: 'A', x: 128, y: 152 },
-  B: { id: 'B', name: 'Workshop Path', tag: 'B', x: 204, y: 122 },
-  C: { id: 'C', name: 'Canteen Junction', tag: 'C', x: 262, y: 168 },
-  D: { id: 'D', name: 'Girls Hostel D', tag: 'D', x: 300, y: 70 },
-  LAB: { id: 'LAB', name: 'Electronics Lab', tag: 'L', x: 66, y: 94 },
-  ADMIN: { id: 'ADMIN', name: 'Admin Block', tag: 'Ad', x: 92, y: 228 },
-  WALL: { id: 'WALL', name: 'Boundary Wall East', tag: 'W', x: 344, y: 214 },
-};
+// Checkpoints come from the campus model (src/campus.js).
+export const CP = Object.fromEntries(Object.entries(CHECKPOINTS).map(([id, c]) => [id, { id, ...c }]));
 
-export const cpShort = (id) => (CP[id].tag.length === 1 && id !== 'GATE' && id !== 'LAB' && id !== 'WALL' ? CP[id].tag : CP[id].name);
+export const cpShort = (id) => (['A', 'B', 'C', 'D'].includes(id) ? CP[id].tag : CP[id].name);
 
 export const GUARDS = [
-  { id: 'ramesh', name: 'Ramesh', post: 'Main Gate', x: 204, y: 266 },
-  { id: 'sunita', name: 'Sunita', post: 'Hostel D', x: 280, y: 92 },
-  { id: 'imran', name: 'Imran', post: 'Library', x: 104, y: 170 },
+  { id: 'ramesh', name: 'Ramesh', post: 'Main Gate', ...GUARD_POSTS.ramesh },
+  { id: 'sunita', name: 'Sunita', post: 'Girls Hostel', ...GUARD_POSTS.sunita },
+  { id: 'imran', name: 'Imran', post: 'Library', ...GUARD_POSTS.imran },
 ];
 
 export const ROUTES = {
   D: {
-    dest: 'Girls Hostel D',
+    dest: 'Girls Hostel',
     sub: 'Via Workshop Path and Canteen',
     guard: 'sunita',
     finalScan: 'hostel QR',
@@ -52,8 +45,8 @@ export const ROUTES = {
     ],
   },
   GATE: {
-    dest: 'Main Gate (auto stand)',
-    sub: 'Via Admin Block',
+    dest: 'Main Gate (PB Road)',
+    sub: 'Via Main Building',
     guard: 'ramesh',
     finalScan: 'gate QR',
     steps: [
@@ -64,6 +57,9 @@ export const ROUTES = {
   },
 };
 
+export { CAMERAS, camsAt };
+export const camById = (id) => CAMERAS.find((c) => c.id === id);
+
 export const ALERT_TYPES = {
   sos: { label: 'SOS', icon: 'siren', pri: 'critical' },
   missed: { label: 'Missed checkpoint', icon: 'clock', pri: 'high' },
@@ -72,6 +68,8 @@ export const ALERT_TYPES = {
   lab: { label: 'Lab equipment leaving without issue', icon: 'cpu', pri: 'high' },
   tailgate: { label: 'Tailgating at gate', icon: 'tailgate', pri: 'medium' },
   tamper: { label: 'Camera tampered', icon: 'cameraOff', pri: 'medium' },
+  camoffline: { label: 'Camera offline', icon: 'cameraOff', pri: 'medium' },
+  flagged: { label: 'Guard-flagged incident', icon: 'flag', pri: 'high' },
   visitor: { label: 'Visitor in wrong zone', icon: 'badge', pri: 'medium' },
 };
 
@@ -82,7 +80,7 @@ export const PRI = {
 };
 
 export const VISITOR_PURPOSES = ['Meeting', 'Parent visit', 'Delivery', 'Interview', 'Event', 'Maintenance'];
-export const VISITOR_ZONES = ['Admin Block', 'Library', 'Electronics Lab', 'Canteen Junction', 'Main Gate'];
+export const VISITOR_ZONES = ['Main Building', 'Central Library', 'ECE Electronics Lab', 'Canteen Junction', 'Auditorium'];
 
 export const DISPUTE_REASONS = ["I didn't take this", 'Quantity is wrong', 'It was already damaged', 'Wrong time or bench', 'Something else'];
 
@@ -122,7 +120,7 @@ export function hash(str) {
 }
 export const randInt = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 export const cls = (...a) => a.filter(Boolean).join(' ');
-export const distM = (a, b) => Math.round(Math.hypot(a.x - b.x, a.y - b.y) * 2.4);
+export const distM = (a, b) => Math.round(Math.hypot(a.x - b.x, a.y - b.y)); // positions are in metres
 export const qrCode = (id, slot) => `KAVACH|${id}|${slot}|${hash(id + ':' + slot + ':k4v4ch').slice(0, 6)}`;
 
 // ---------- initial state ----------
@@ -139,10 +137,10 @@ export function makeInitial() {
       dir: 'OUT',
       log: [
         { id: 'g6', dir: 'OUT', place: 'Main Gate', time: at(1, 18, 14) },
-        { id: 'g5', dir: 'OUT', place: 'Electronics Lab', time: at(1, 16, 3) },
-        { id: 'g4', dir: 'IN', place: 'Electronics Lab', time: at(1, 14, 1) },
-        { id: 'g3', dir: 'OUT', place: 'Library', time: at(1, 12, 40) },
-        { id: 'g2', dir: 'IN', place: 'Library', time: at(1, 10, 22) },
+        { id: 'g5', dir: 'OUT', place: 'ECE Electronics Lab', time: at(1, 16, 3) },
+        { id: 'g4', dir: 'IN', place: 'ECE Electronics Lab', time: at(1, 14, 1) },
+        { id: 'g3', dir: 'OUT', place: 'Central Library', time: at(1, 12, 40) },
+        { id: 'g2', dir: 'IN', place: 'Central Library', time: at(1, 10, 22) },
         { id: 'g1', dir: 'IN', place: 'Main Gate', time: at(1, 8, 47) },
         { id: 'g0', dir: 'OUT', place: 'Main Gate', time: at(2, 17, 40) },
       ],
@@ -150,13 +148,13 @@ export function makeInitial() {
     walk: null,
     walksCompleted: 0,
     otherWalks: [
-      { id: 'w1', name: 'Ananya K.', dest: 'Girls Hostel D', at: 'C', progress: 0.7, started: now - 7 * MIN },
-      { id: 'w2', name: 'Rahul M.', dest: 'Main Gate (auto stand)', at: 'ADMIN', progress: 0.5, started: now - 3 * MIN },
+      { id: 'w1', name: 'Ananya K.', dest: 'Girls Hostel', at: 'C', progress: 0.7, started: now - 7 * MIN },
+      { id: 'w2', name: 'Rahul M.', dest: 'Main Gate (PB Road)', at: 'ADMIN', progress: 0.5, started: now - 3 * MIN },
     ],
     guards: GUARDS.map((g) => ({ ...g })),
     alerts: [
-      { ...base, id: 'AL-1038', type: 'tamper', cp: 'C', detail: 'Camera C-2 view blocked for 40 s.', time: now - 47 * MIN, status: 'resolved', assigned: 'imran', acceptedBy: 'imran', resolvedBy: 'imran', resolvedAt: now - 35 * MIN, note: 'Leaf stuck on lens. Cleaned.' },
-      { ...base, id: 'AL-1035', type: 'tailgate', cp: 'GATE', detail: 'Two people entered on one scan, Lane 2.', time: now - 2 * HOUR, status: 'resolved', assigned: 'ramesh', acceptedBy: 'ramesh', resolvedBy: 'ramesh', resolvedAt: now - 2 * HOUR + 4 * MIN, note: 'Second person was a visitor with a valid pass.' },
+      { ...base, id: 'AL-1038', type: 'tamper', cp: 'C', cam: 'CAM-C2', detail: 'CAM-C2 view blocked for 40 s.', time: now - 47 * MIN, status: 'resolved', assigned: 'imran', acceptedBy: 'imran', resolvedBy: 'imran', resolvedAt: now - 35 * MIN, note: 'Leaf stuck on lens. Cleaned.' },
+      { ...base, id: 'AL-1035', type: 'tailgate', cp: 'GATE', cam: 'CAM-G2', detail: 'Two people entered on one scan, Lane 2.', time: now - 2 * HOUR, status: 'resolved', assigned: 'ramesh', acceptedBy: 'ramesh', resolvedBy: 'ramesh', resolvedAt: now - 2 * HOUR + 4 * MIN, note: 'Second person was a visitor with a valid pass.' },
     ],
     inventory: [
       { id: 'res220', name: 'Resistor 220 Ω', short: 'resistor', stock: 500, min: 100, gram: 0.25, kind: 'consumable', shelf: 'E-3' },
@@ -178,17 +176,21 @@ export function makeInitial() {
     disputes: [],
     returnCount: 0,
     visitors: [
-      { id: 'V-201', name: 'Rakesh Gupta', phone: '98201 44718', purpose: 'Delivery', dest: 'Electronics Lab', from: '10:00', to: '13:00', status: 'inside', created: now - 50 * MIN },
-      { id: 'V-202', name: 'Anjali Nair', phone: '99860 31207', purpose: 'Parent visit', dest: 'Admin Block', from: '11:30', to: '12:30', status: 'expected', created: now - 20 * MIN },
+      { id: 'V-201', name: 'Rakesh Gupta', phone: '98201 44718', purpose: 'Delivery', dest: 'ECE Electronics Lab', from: '10:00', to: '13:00', status: 'inside', created: now - 50 * MIN },
+      { id: 'V-202', name: 'Anjali Nair', phone: '99860 31207', purpose: 'Parent visit', dest: 'Main Building', from: '11:30', to: '12:30', status: 'expected', created: now - 20 * MIN },
     ],
     audit: [
-      { id: 'au5', who: 'Guard Imran', action: 'Viewed 10 s clip · Library corridor', reason: 'Responding to alert AL-1031', cat: 'footage', time: now - 2 * HOUR - 8 * MIN },
+      { id: 'au6', who: 'Guard Ramesh', action: 'Viewed live feed CAM-G2 · Main Gate', reason: 'Live monitoring (on duty)', cat: 'footage', time: now - 40 * MIN },
+      { id: 'au5', who: 'Guard Imran', action: 'Viewed 10 s clip CAM-A1 · Library entrance', reason: 'Responding to alert AL-1031', cat: 'footage', time: now - 2 * HOUR - 8 * MIN },
       { id: 'au4', who: 'System', action: 'Auto-deleted 38 Saathi Walk photos', reason: 'All walkers reached safely last night', cat: 'system', time: now - 9 * HOUR },
       { id: 'au3', who: 'Lab In-charge (Dr. Mehta)', action: 'Looked up issue record · 21BRS045', reason: 'Overdue item check', cat: 'lookup', time: now - 26 * HOUR },
-      { id: 'au2', who: 'Security Head (Mr. Rao)', action: 'Unblurred clip · Workshop Path', reason: 'Bike theft complaint T-12. Approved by student committee', cat: 'footage', time: now - 3 * 24 * HOUR },
+      { id: 'au2', who: 'Security Head (Mr. Rao)', action: 'Unblurred clip CAM-B1 · Workshop Path', reason: 'Bike theft complaint T-12. Approved by student committee', cat: 'footage', time: now - 3 * 24 * HOUR },
       { id: 'au1', who: 'Admin (Ms. Kulkarni)', action: 'Exported monthly transparency report', reason: 'Student council meeting', cat: 'lookup', time: now - 5 * 24 * HOUR },
     ],
     heatBase: { GATE: 14, WALL: 9, B: 7, D: 6, C: 4, LAB: 3, A: 2, ADMIN: 1 },
+    cams: Object.fromEntries(CAMERAS.map((c) => [c.id, { status: 'online', zoom: 1, pan: 0, since: now - 6 * 24 * HOUR }])),
+    camEvents: 1286, // analytics events today (behaviour only)
+    darkSpots: [],
     monthly: { walks: 214, followers: 3, faceSearches: 0, unblurs: 2 },
     toasts: [],
   };
