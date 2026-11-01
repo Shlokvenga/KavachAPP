@@ -3,7 +3,7 @@
 // Each action below receives a draft (a fresh clone) and mutates it.
 import { createContext, useContext } from 'react';
 import {
-  ALERT_TYPES, CP, ESCALATE_MS, MIN, ROUTES, STUDENT, camById, camsAt, cpShort, distM, fmtTime, randInt, verifyQr,
+  ALERT_TYPES, CP, ESCALATE_MS, MIN, ROUTES, camById, camsAt, cpShort, distM, fmtTime, presence, studentById, studentOf, verifyQr,
 } from './data.js';
 import { RULES } from './vision/rules.js';
 
@@ -26,12 +26,12 @@ export function audit(d, who, action, reason, cat = 'footage') {
 export const guardById = (d, id) => d.guards.find((g) => g.id === id);
 export const nearestGuard = (d, cpId) => [...d.guards].sort((a, b) => distM(a, CP[cpId]) - distM(b, CP[cpId]))[0];
 
-export function createAlert(d, { type, cp, detail, photo = null, walk = false, assign = null, cam = null }) {
+export function createAlert(d, { type, cp, detail, photo = null, walk = false, assign = null, cam = null, student = null }) {
   const g = assign ? guardById(d, assign) : nearestGuard(d, cp);
   const a = {
     id: 'AL-' + ++d.seq, type, cp, detail, photo, walk, cam: cam || camsAt(cp)[0] || null,
     time: Date.now(), status: 'new', escalated: false,
-    assigned: g.id, acceptedBy: null, lights: false, speaker: false, resolvedBy: null, note: null,
+    assigned: g.id, acceptedBy: null, lights: false, speaker: false, resolvedBy: null, note: null, student,
   };
   d.alerts.unshift(a);
   toast(d, 'guard', `${ALERT_TYPES[type].label} · ${CP[cp].name}`, 'alert');
@@ -63,69 +63,81 @@ export function tick(d) {
       raiseMissed(d);
     }
   }
-
-  if (now - d.lastDrift > 5000) {
-    d.lastDrift = now;
-    d.camEvents += randInt(0, 4);
-    d.inside = Math.max(900, d.inside + randInt(-2, 3));
-    if (Math.random() < 0.6) d.entriesToday += randInt(1, 3);
-  }
 }
 
 // ---------- student: gate ----------
-export function gateScan(d, dir) {
-  const now = Date.now();
-  d.gate.dir = dir;
-  d.gate.log.unshift({ id: 'g' + ++d.seq, dir, place: 'Main Gate', time: now });
-  if (dir === 'IN') { d.inside += 1; d.entriesToday += 1; } else d.inside -= 1;
+function logGate(d, sid, dir, place) {
+  d.gate.dirs[sid] = dir;
+  d.gate.log.unshift({ id: 'g' + ++d.seq, sid, dir, place, time: Date.now() });
+  d.gate.log = d.gate.log.slice(0, 200);
 }
+
+export function gateScan(d, dir) {
+  logGate(d, studentOf(d).id, dir, 'Main Gate');
+}
+
+export function setGender(d, gender) {
+  if (d.walk && d.walk.phase === 'active') { toast(d, 'student', 'Finish your Saathi Walk before switching student', 'warn'); return; }
+  d.gender = gender;
+  d.walk = null;
+}
+
+const walkStudent = (w) => ({ id: w.sid, name: w.name, gender: w.gender });
 
 // ---------- student: Saathi Walk ----------
 export const lastPassed = (w) => [...w.steps].reverse().find((s) => s.status === 'passed');
 export const nextStep = (w) => w.steps.find((s) => s.status !== 'passed');
 
-export function startWalk(d, destKey, sharing) {
+// `snap` is an anonymised frame from a real camera at the checkpoint, if one is connected.
+export function startWalk(d, destKey, sharing, { femaleGuard = false, snap = null } = {}) {
   const r = ROUTES[destKey];
+  const st = studentOf(d);
   const now = Date.now();
   d.walk = {
     id: 'W-' + ++d.seq,
+    sid: st.id,
+    name: st.name,
+    first: st.first,
+    gender: st.gender,
+    femaleGuard,
     dest: destKey,
-    guard: r.guard,
+    guard: femaleGuard ? 'sunita' : r.guard,
     startedAt: now,
     phase: 'active',
     sharing: !!sharing,
-    link: `kavach.app/w/${(d.seq * 7919).toString(36)}${STUDENT.id.slice(-3)}`,
-    steps: r.steps.map((s, i) => ({ ...s, status: i === 0 ? 'passed' : 'pending', time: i === 0 ? now : null })),
+    link: `kavach.app/w/${(d.seq * 7919).toString(36)}${st.id.slice(-3)}`,
+    steps: r.steps.map((s, i) => ({ ...s, status: i === 0 ? 'passed' : 'pending', time: i === 0 ? now : null, snap: i === 0 ? snap : null })),
     missing: null,
     followerAt: null,
     followerAlert: null,
     sosAlert: null,
     missedAlert: null,
   };
-  const g = guardById(d, r.guard);
-  toast(d, 'student', `Photo captured at checkpoint A · ${fmtTime(now)}`, 'success');
-  toast(d, 'guard', `Saathi Walk started: Priya S. → ${r.dest} (watching: ${g.name})`, 'info');
+  const g = guardById(d, d.walk.guard);
+  toast(d, 'student', snap ? `Photo captured at checkpoint A · ${fmtTime(now)}` : `Checked in at checkpoint A · ${fmtTime(now)}`, 'success');
+  toast(d, 'guard', `Saathi Walk started: ${st.name} → ${r.dest} (watching: ${g.name})`, 'info');
 }
 
-export function passNext(d) {
+export function passNext(d, snap = null) {
   const w = d.walk;
   const step = nextStep(w);
   if (!step) return;
   const now = Date.now();
   step.status = 'passed';
   step.time = now;
+  step.snap = snap;
   w.missing = null;
   if (w.missedAlert) {
     const a = findAlert(d, w.missedAlert);
     if (a && a.status !== 'resolved') {
       a.status = 'resolved'; a.resolvedAt = now; a.resolvedBy = 'system';
-      a.note = `Priya passed ${cpShort(step.cp)} at ${fmtTime(now)}. Auto-closed.`;
-      toast(d, 'guard', `${a.id} auto-closed: Priya passed ${cpShort(step.cp)}`, 'success');
+      a.note = `${w.first} passed ${cpShort(step.cp)} at ${fmtTime(now)}. Auto-closed.`;
+      toast(d, 'guard', `${a.id} auto-closed: ${w.first} passed ${cpShort(step.cp)}`, 'success');
     }
     w.missedAlert = null;
   }
   if (step === w.steps[w.steps.length - 1]) arrive(d);
-  else toast(d, 'student', `Passed ${cpShort(step.cp)} · photo captured`, 'success');
+  else toast(d, 'student', `Passed ${cpShort(step.cp)}${snap ? ' · photo captured' : ''}`, 'success');
 }
 
 function arrive(d) {
@@ -134,15 +146,18 @@ function arrive(d) {
   w.phase = 'arrived';
   w.arrivedAt = now;
   d.walksCompleted += 1;
-  d.monthly.walks += 1;
+  const ids = [w.sosAlert, w.followerAlert, w.missedAlert];
+  let photos = w.steps.filter((x) => x.snap).length;
   for (const a of d.alerts) {
-    if (a.walk && a.status !== 'resolved' && [w.sosAlert, w.followerAlert].includes(a.id)) {
-      a.status = 'resolved'; a.resolvedAt = now; a.resolvedBy = 'system'; a.note = 'Student reached safely.';
-    }
+    if (!a.walk || !a.student || a.student.id !== w.sid) continue;
+    if (a.status !== 'resolved' && ids.includes(a.id)) { a.status = 'resolved'; a.resolvedAt = now; a.resolvedBy = 'system'; a.note = 'Student reached safely.'; }
+    if (a.photo && a.photo.snap) { a.photo.snap = null; photos += 1; }
   }
-  const photos = w.steps.length;
-  audit(d, 'System', `Auto-deleted ${photos} Saathi Walk photos (${w.id})`, `Priya reached ${ROUTES[w.dest].dest} safely`, 'system');
-  toast(d, 'guard', `Priya S. reached ${ROUTES[w.dest].dest} safely ✓`, 'success');
+  for (const st of w.steps) { st.hadPhoto = !!st.snap; st.snap = null; } // the promise: walk photos are deleted on arrival
+  w.photosDeleted = photos;
+  audit(d, 'System', `Deleted ${photos} Saathi Walk photo${photos === 1 ? '' : 's'} (${w.id})`, `${w.name} reached ${ROUTES[w.dest].dest} safely`, 'system');
+  logGate(d, w.sid, w.dest === 'GATE' ? 'OUT' : 'IN', `${ROUTES[w.dest].dest} (${ROUTES[w.dest].finalScan})`);
+  toast(d, 'guard', `${w.name} reached ${ROUTES[w.dest].dest} safely ✓`, 'success');
 }
 
 export function goMissing(d) {
@@ -157,10 +172,11 @@ export function raiseMissed(d) {
   const a = createAlert(d, {
     type: 'missed',
     cp: last.cp,
-    detail: `Missed checkpoint ${cpShort(next.cp)}. Last seen at ${cpShort(last.cp)}, ${fmtTime(last.time)}. Saathi Walk: Priya Sharma → ${ROUTES[w.dest].dest}. No answer to "Are you OK?"`,
-    photo: { cp: last.cp, time: last.time, cam: camsAt(last.cp)[0] },
+    detail: `Missed checkpoint ${cpShort(next.cp)}. Last seen at ${cpShort(last.cp)}, ${fmtTime(last.time)}. Saathi Walk: ${w.name} → ${ROUTES[w.dest].dest}. No answer to "Are you OK?"`,
+    photo: { cp: last.cp, time: last.time, cam: camsAt(last.cp)[0], snap: last.snap },
     walk: true,
     assign: w.guard,
+    student: walkStudent(w),
   });
   w.missing = { stage: 'alerted' };
   w.missedAlert = a.id;
@@ -180,10 +196,11 @@ export function sos(d) {
   const a = createAlert(d, {
     type: 'sos',
     cp: last.cp,
-    detail: `SOS from Priya Sharma (Saathi Walk → ${ROUTES[w.dest].dest}). Last checkpoint ${cpShort(last.cp)}, ${fmtTime(last.time)}. Nearby cameras switched to live.`,
-    photo: { cp: last.cp, time: last.time, cam: camsAt(last.cp)[0] },
+    detail: `SOS from ${w.name} (Saathi Walk → ${ROUTES[w.dest].dest}). Last checkpoint ${cpShort(last.cp)}, ${fmtTime(last.time)}. Cameras there switch to INVESTIGATE.`,
+    photo: { cp: last.cp, time: last.time, cam: camsAt(last.cp)[0], snap: last.snap },
     walk: true,
     assign: w.guard,
+    student: walkStudent(w),
   });
   w.sosAlert = a.id;
   toast(d, 'student', `SOS sent. Guard ${guardById(d, w.guard).name} notified.`, 'alert');
@@ -208,13 +225,13 @@ export function follower(d) {
   const a = createAlert(d, {
     type: 'follower',
     cp: last.cp,
-    detail: `Same unidentified person behind Priya S. for 3 checkpoints (anonymous track, faces blurred). Last at ${cpShort(last.cp)}.`,
+    detail: `${w.name} reported someone following (Saathi Walk). Last checkpoint ${cpShort(last.cp)}.`,
     walk: true,
     assign: w.guard,
+    student: walkStudent(w),
   });
   w.followerAt = Date.now();
   w.followerAlert = a.id;
-  d.monthly.followers += 1;
   vibrate([120, 60, 120, 60, 120]);
   toast(d, 'student', `Guard ${g.name} notified discreetly`, 'warn');
 }
@@ -256,9 +273,9 @@ export function resolveAlert(d, id, guardId) {
   a.resolvedBy = guardId;
   if (!a.acceptedBy) a.acceptedBy = guardId;
   if ((a.type === 'tamper' || a.type === 'camoffline') && a.cam && d.cams[a.cam]) {
-    d.cams[a.cam].status = 'online';
+    d.cams[a.cam].status = 'none';
     d.cams[a.cam].since = Date.now();
-    a.note = a.note || `${a.cam} checked and back online.`;
+    a.note = a.note || `${a.cam} checked and fixed.`;
   }
   const g = guardById(d, guardId);
   toast(d, 'guard', `${a.id} resolved by ${g.name}`, 'success');
@@ -333,42 +350,43 @@ export function reportDarkSpot(d, cp) {
 export function equipmentLeaving(d, itemId = 'osc4') {
   const it = d.inventory.find((i) => i.id === itemId);
   if (it.holder) {
-    toast(d, 'guard', `${it.name} passed lab door. Issued to ${it.holder}. Allowed ✓`, 'success');
+    const who = studentById(it.holder);
+    toast(d, 'guard', `${it.name} passed lab door. Issued to ${who ? who.name : it.holder}. Allowed ✓`, 'success');
     toast(d, 'admin', `${it.name} left lab: issued to ${it.holder}. No alert`, 'success');
-    toast(d, 'student', `${it.name} checked out on your account at lab door`, 'info');
+    if (it.holder === studentOf(d).id) toast(d, 'student', `${it.name} checked out on your account at lab door`, 'info');
     return false;
   }
-  createAlert(d, { type: 'lab', cp: 'LAB', cam: 'CAM-L1', detail: `${it.name} (RFID ${it.rfid}) passed the lab door without being issued. CAM-L1 clip attached.` });
+  createAlert(d, { type: 'lab', cp: 'LAB', cam: 'CAM-L1', detail: `${it.name} (RFID ${it.rfid}) passed the lab door without being issued.` });
   createAlert(d, { type: 'lab', cp: 'GATE', cam: 'CAM-G1', detail: `Hold at gate: ${it.name} (RFID ${it.rfid}) left the ECE lab without issue. Check bags at exit.` });
   toast(d, 'admin', 'Cross-module rule fired: lab door + Main Gate alerted', 'warn');
   return true;
 }
 
 export function visitorWrongZone(d) {
-  const v = d.visitors.find((x) => x.status !== 'left') || null;
-  const who = v ? `${v.name} (pass ${v.id})` : 'Visitor';
+  const v = d.visitors.find((x) => x.status === 'inside') || d.visitors.find((x) => x.status !== 'left') || null;
   createAlert(d, {
     type: 'visitor',
     cp: 'D',
     cam: 'CAM-D2',
-    detail: `${who} seen near the Girls Hostel by CAM-D2. Allowed zone: ${v ? v.dest : 'Main Building'}. Pass ${v ? v.from + '–' + v.to : ''}.`,
+    detail: v ? `${v.name} (pass ${v.id}) seen near the Girls Hostel. Allowed zone: ${v.dest}, ${v.from}–${v.to}.` : 'Someone without a visitor pass seen near the Girls Hostel.',
   });
   toast(d, 'admin', 'Visitor outside allowed zone. Guard alerted.', 'warn');
 }
 
 // ---------- lab ----------
 export function issueItems(d, picks) {
+  const st = studentOf(d);
   const lines = [];
   for (const [id, q] of Object.entries(picks)) {
     if (!q) continue;
     const it = d.inventory.find((x) => x.id === id);
     it.stock -= q;
-    if (it.rfid) it.holder = STUDENT.id;
-    d.issued.unshift({ id: 'IS-' + ++d.seq, itemId: id, name: it.name, qty: q, time: Date.now(), status: 'issued', rfid: !!it.rfid });
+    if (it.rfid) it.holder = st.id;
+    d.issued.unshift({ id: 'IS-' + ++d.seq, sid: st.id, itemId: id, name: it.name, qty: q, time: Date.now(), status: 'issued', rfid: !!it.rfid, bench: it.bench || null });
     lines.push(`${q} × ${it.name}`);
   }
   toast(d, 'student', `Issued to you: ${lines.join(', ')}`, 'success');
-  toast(d, 'admin', `Lab issue → Priya S.: ${lines.join(', ')}`, 'info');
+  toast(d, 'admin', `Lab issue → ${st.name}: ${lines.join(', ')}`, 'info');
 }
 
 export function returnItem(d, issueId, missing) {
@@ -380,15 +398,16 @@ export function returnItem(d, issueId, missing) {
   it.stock += is.qty - missing;
   if (it.rfid) it.holder = null;
   if (is.qty > 1) d.returnCount += 1;
-  if (missing) toast(d, 'admin', `Short return: ${missing} ${it.short} missing (Priya S.)`, 'warn');
+  if (missing) toast(d, 'admin', `Short return: ${missing} ${it.short} missing (${(studentById(is.sid) || {}).name || is.sid})`, 'warn');
   toast(d, 'student', missing ? `Returned with ${missing} ${it.short} reported missing` : `Returned: ${is.qty} × ${is.name} ✓`, missing ? 'warn' : 'success');
 }
 
 export function raiseDispute(d, label, reason) {
-  d.disputes.unshift({ id: 'DS-' + ++d.seq, label, reason, time: Date.now(), status: 'open' });
-  audit(d, `Priya Sharma (${STUDENT.id})`, `Raised dispute · ${label}`, reason, 'lookup');
+  const st = studentOf(d);
+  d.disputes.unshift({ id: 'DS-' + ++d.seq, sid: st.id, label, reason, time: Date.now(), status: 'open' });
+  audit(d, `${st.name} (${st.id})`, `Raised dispute · ${label}`, reason, 'lookup');
   toast(d, 'student', 'Dispute sent to Lab In-charge and student committee', 'success');
-  toast(d, 'admin', `New dispute from ${STUDENT.id}: ${label}`, 'info');
+  toast(d, 'admin', `New dispute from ${st.id}: ${label}`, 'info');
 }
 
 // ---------- on-device AI ----------
@@ -399,7 +418,6 @@ export function aiEvent(d, camId, ev, snap) {
   const type = RULES[ev.rule].alert;
   d.ai.events += 1;
   d.ai.byRule[ev.rule] = (d.ai.byRule[ev.rule] || 0) + 1;
-  d.camEvents += 1;
   if (ev.rule === 'tamper' && d.cams[camId]) { d.cams[camId].status = 'tampered'; d.cams[camId].since = Date.now(); }
   const a = createAlert(d, { type, cp: cam.cp, cam: camId, detail: `${cam.name}: ${ev.explain}.` });
   a.ai = { rule: ev.rule, name: RULES[ev.rule].name, conf: +ev.conf.toFixed(2), explain: ev.explain, model: ev.rule === 'tamper' ? 'Image statistics (no ML)' : 'CenterNet + tracker, on device' };
@@ -414,40 +432,35 @@ export function gateQr(d, camId, text, face) {
   const q = verifyQr(text);
   const now = Date.now();
   const rec = { id: 'GQ-' + ++d.seq, cam: camId, time: now, ok: false, reason: q.reason || '', face: face || null };
-  d.ai.used = d.ai.used || [];
+  const holder = q.ok ? studentById(q.id) : null;
   if (q.ok && d.ai.used.includes(text)) { rec.reason = 'Code already used (one scan per code)'; }
-  else if (q.ok && q.id !== STUDENT.id) { rec.reason = 'Pass belongs to another student (demo knows only 21BRS045)'; }
+  else if (q.ok && !holder) { rec.reason = 'Unknown student ID'; }
   else if (q.ok) {
-    const dir = d.gate.dir === 'IN' ? 'OUT' : 'IN';
+    const dir = presence(d, q.id) === 'IN' ? 'OUT' : 'IN';
     if (face && !face.ok && face.decision !== 'NOT ENROLLED') rec.reason = 'Face check failed: ' + face.reasons[0];
     else {
-      rec.ok = true; rec.dir = dir;
+      rec.ok = true; rec.dir = dir; rec.who = holder.name;
       d.ai.used = [text, ...d.ai.used].slice(0, 50);
-      d.gate.dir = dir;
-      d.gate.log.unshift({ id: 'g' + ++d.seq, dir, place: `Main Gate (${camId}, live)`, time: now });
-      if (dir === 'IN') { d.inside += 1; d.entriesToday += 1; } else d.inside -= 1;
+      logGate(d, q.id, dir, `Main Gate (${camId}, live)`);
     }
   }
   d.ai.gate.unshift(rec);
   d.ai.gate = d.ai.gate.slice(0, 12);
   const faceTxt = face ? (face.decision === 'MATCH' ? ` · face 1:1 ${(face.sim * 100).toFixed(0)}%, live ✓` : face.decision === 'NOT ENROLLED' ? ' · no face enrolled' : '') : '';
+  const mine = q.id && q.id === studentOf(d).id;
   if (rec.ok) {
-    toast(d, 'guard', `${cam.name}: pass valid → ${rec.dir}${faceTxt}`, 'success');
-    toast(d, 'student', `Entry logged at the gate: ${rec.dir}, ${fmtTime(now)}${faceTxt}`, 'success');
+    toast(d, 'guard', `${cam.name}: ${holder.name} → ${rec.dir}${faceTxt}`, 'success');
+    if (mine) toast(d, 'student', `Entry logged at the gate: ${rec.dir}, ${fmtTime(now)}${faceTxt}`, 'success');
   } else {
     toast(d, 'guard', `${cam.name}: rejected. ${rec.reason}`, 'alert');
-    if (q.id === STUDENT.id) toast(d, 'student', `Gate rejected your pass: ${rec.reason}`, 'alert');
+    if (mine) toast(d, 'student', `Gate rejected your pass: ${rec.reason}`, 'alert');
   }
 }
 
 export function gateFaceResult(d, result) {
-  const now = Date.now();
-  if (result.ok) {
-    const dir = d.gate.dir === 'IN' ? 'OUT' : 'IN';
-    d.gate.dir = dir;
-    d.gate.log.unshift({ id: 'g' + ++d.seq, dir, place: 'Main Gate (face 1:1, live)', time: now });
-    if (dir === 'IN') { d.inside += 1; d.entriesToday += 1; } else d.inside -= 1;
-    return dir;
-  }
-  return null;
+  if (!result.ok) return null;
+  const sid = studentOf(d).id;
+  const dir = presence(d, sid) === 'IN' ? 'OUT' : 'IN';
+  logGate(d, sid, dir, 'Main Gate (face 1:1, live)');
+  return dir;
 }

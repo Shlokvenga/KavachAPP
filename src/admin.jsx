@@ -1,10 +1,10 @@
 // Admin dashboard: overview, visitor passes, lab inventory, alert heatmap, audit log.
 import { useRef, useState } from 'react';
-import { ALERT_TYPES, COLLEGE, CP, PRI, QR_PERIOD, VISITOR_PURPOSES, VISITOR_ZONES, cls, fmtDay, fmtTime, pad, qrCode, ago } from './data.js';
+import { ALERT_TYPES, COLLEGE, CP, PRI, QR_PERIOD, VISITOR_PURPOSES, VISITOR_ZONES, campusStats, cls, fmtDay, fmtTime, heatFrom, pad, qrCode, studentById, transparency, ago } from './data.js';
 import { audit, equipmentLeaving, toast, useApp, visitorWrongZone } from './store.js';
 import { CAMERAS } from './campus.js';
-import { CAM_STATUS, CameraFeed, CameraViewer } from './cctv.jsx';
-import { CommandCentre, LayerChips, Twin, heatFor, twinData } from './twinview.jsx';
+import { CAM_STATUS, CameraFeed, CameraViewer, camStatus } from './cctv.jsx';
+import { CommandCentre, LayerChips, Twin, twinData } from './twinview.jsx';
 import { AiAdminCard } from './vision/ui.jsx';
 import { Badge, BottomNav, Btn, Card, DemoPanel, Icon, LiveDot, QR, Ring, SectionTitle, Sheet, useFastNow } from './ui.jsx';
 
@@ -61,26 +61,36 @@ function Stat({ icon, label, value, tone = 'brand', sub, onClick }) {
 
 function Overview({ go, openCam, openCc }) {
   const { s, mutate, now } = useApp();
-  const counts = { online: 0, offline: 0, tampered: 0 };
-  for (const c of Object.values(s.cams)) counts[c.status] += 1;
-  const issues = CAMERAS.filter((c) => s.cams[c.id].status !== 'online');
+  const counts = { online: 0, none: 0, offline: 0, tampered: 0 };
+  for (const c of CAMERAS) counts[camStatus(s, c.id)] += 1;
+  const issues = CAMERAS.filter((c) => ['tampered', 'offline'].includes(camStatus(s, c.id)));
   const open = s.alerts.filter((a) => a.status !== 'resolved');
-  const walks = s.otherWalks.length + (s.walk && s.walk.phase === 'active' ? 1 : 0);
-  const issued = 37 + s.issued.filter((i) => i.status === 'issued').reduce((a, b) => a + b.qty, 0);
-  const visitors = s.visitors.filter((v) => v.status !== 'left').length;
+  const st = campusStats(s, now);
   const osc = s.inventory.find((i) => i.id === 'osc4');
+  const fresh = !s.alerts.length && !s.gate.log.length && !s.visitors.length && !counts.online;
   return (
     <div className="space-y-4 p-4 pb-8">
+      {fresh && (
+        <Card className="ring-brand/30">
+          <div className="font-display text-sm font-bold uppercase tracking-wider text-slate-900">Getting started</div>
+          <p className="mt-1 text-sm text-slate-600">Nothing has happened yet. Everything on this dashboard is counted from real activity in the app.</p>
+          <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-slate-600">
+            <li>Connect cameras in <b className="text-slate-800">Guard → Cameras</b> to turn on live AI.</li>
+            <li>Students scan their ID at the gate and start Saathi Walks.</li>
+            <li>Register expected visitors in <button type="button" className="font-semibold text-brand underline" onClick={() => go('visitors')}>Visitors</button>.</li>
+          </ol>
+        </Card>
+      )}
       <div className="grid grid-cols-2 gap-3">
-        <Stat icon="users" label="Inside campus now" value={s.inside.toLocaleString('en-IN')} sub="From gate scans" />
-        <Stat icon="login" label="Entries today" value={s.entriesToday.toLocaleString('en-IN')} tone="green" />
-        <Stat icon="walk" label="Active Saathi Walks" value={walks} tone="amber" sub={`${s.walksCompleted} finished today here`} />
-        <Stat icon="bell" label="Open alerts" value={open.length} tone={open.length ? 'red' : 'green'} sub={`${open.filter((a) => a.escalated).length} escalated`} />
-        <Stat icon="box" label="Lab items issued" value={issued} tone="violet" onClick={() => go('stock')} />
-        <Stat icon="badge" label="Visitors on campus" value={visitors} onClick={() => go('visitors')} />
+        <Stat icon="users" label="Inside campus now" value={st.inside} sub={`${st.studentsIn} student${st.studentsIn === 1 ? '' : 's'}, ${st.visitorsIn} visitor${st.visitorsIn === 1 ? '' : 's'}`} />
+        <Stat icon="login" label="Entries today" value={st.entriesToday} tone="green" sub="Gate scans and visitor check-ins" />
+        <Stat icon="walk" label="Active Saathi Walks" value={st.walksActive} tone="amber" sub={`${s.walksCompleted} completed`} />
+        <Stat icon="bell" label="Open alerts" value={st.openAlerts} tone={st.openAlerts ? 'red' : 'green'} sub={`${st.escalated} escalated`} />
+        <Stat icon="box" label="Lab items issued" value={st.labIssued} tone="violet" onClick={() => go('stock')} />
+        <Stat icon="badge" label="Visitors on campus" value={st.visitors} onClick={() => go('visitors')} />
       </div>
 
-      <button type="button" onClick={openCc} className="flex w-full items-center gap-4 rounded-3xl bg-gradient-to-br from-[#0b2a35] to-[#060c11] ring-1 ring-brand/25 p-4 text-left text-white shadow-md active:scale-[.99]">
+      <button type="button" onClick={openCc} className="flex w-full items-center gap-4 rounded-3xl bg-gradient-to-br from-brand/15 to-[#060c11] ring-1 ring-brand/25 p-4 text-left text-white shadow-md active:scale-[.99]">
         <span className="grid h-12 w-12 place-items-center rounded-2xl bg-white/10"><Icon name="map" className="h-6 w-6 text-accent" /></span>
         <span className="flex-1">
           <span className="block font-display text-lg font-semibold">Open command centre</span>
@@ -94,10 +104,10 @@ function Overview({ go, openCam, openCc }) {
       <Card>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2"><Icon name="video" className="h-5 w-5 text-brand" /><h3 className="font-bold text-slate-900">CCTV health</h3></div>
-          <Badge className="bg-emerald-100 text-emerald-700"><LiveDot />{counts.online}/{CAMERAS.length} live</Badge>
+          <Badge className={counts.online ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}>{counts.online > 0 && <LiveDot />}{counts.online}/{CAMERAS.length} connected</Badge>
         </div>
         <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-          {[[counts.offline, 'Offline', 'text-slate-600'], [counts.tampered, 'Tampered', 'text-amber-600'], [s.camEvents.toLocaleString('en-IN'), 'AI events today', 'text-slate-900'], [s.darkSpots.length, 'Student reports', 'text-brand']].map(([v, k, c]) => (
+          {[[counts.none, 'Not connected', 'text-slate-600'], [counts.tampered + counts.offline, 'Faults', 'text-amber-600'], [s.ai.events, 'AI events', 'text-slate-900'], [s.darkSpots.length, 'Student reports', 'text-brand']].map(([v, k, c]) => (
             <div key={k} className="rounded-xl bg-raise px-1 py-2"><div className={cls('text-lg font-extrabold', c)}>{v}</div><div className="text-[10px] leading-tight text-slate-500">{k}</div></div>
           ))}
         </div>
@@ -105,15 +115,16 @@ function Overview({ go, openCam, openCc }) {
           <div className="mt-3 space-y-2">
             {issues.map((c) => (
               <button key={c.id} type="button" onClick={() => openCam(c.id)} className="flex w-full items-center gap-3 rounded-xl bg-amber-50 p-2 text-left ring-1 ring-amber-200">
-                <div className="w-20 shrink-0"><CameraFeed camId={c.id} showMeta={false} detections={false} className="rounded-lg" /></div>
-                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-900">{c.id} · {c.name}</span><span className="block text-xs text-slate-500">{CAM_STATUS[s.cams[c.id].status].label} since {fmtTime(s.cams[c.id].since)}</span></span>
+                <div className="w-20 shrink-0"><CameraFeed camId={c.id} showMeta={false} className="rounded-lg" /></div>
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-900">{c.id} · {c.name}</span><span className="block text-xs text-slate-500">{CAM_STATUS[camStatus(s, c.id)].label}{s.cams[c.id].since ? ` since ${fmtTime(s.cams[c.id].since)}` : ''}</span></span>
                 <Icon name="chevR" className="h-4 w-4 text-slate-400" />
               </button>
             ))}
           </div>
         )}
         {s.darkSpots.length > 0 && <p className="mt-2 text-xs text-slate-500">Latest student report: dark spot near {CP[s.darkSpots[0].cp].name}, {fmtTime(s.darkSpots[0].time)}.</p>}
-        <p className="mt-2 text-[11px] text-slate-400">Video kept 7 days, faces blurred, no face search. Every view is in the audit log.</p>
+        {counts.online === 0 && <p className="mt-2 text-xs text-slate-500">No cameras connected yet. Connect webcams or a phone camera in Guard → Cameras.</p>}
+        <p className="mt-2 text-[11px] text-slate-400">Faces pixelated on device, no face search. Every view is in the audit log.</p>
       </Card>
 
       <div>
@@ -145,7 +156,7 @@ function Overview({ go, openCam, openCc }) {
         </div>
         <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-50 p-2.5 text-sm">
           <span>Oscilloscope #4</span>
-          {osc.holder ? <Badge className="bg-emerald-100 text-emerald-700">Issued to {osc.holder}</Badge> : <Badge className="bg-slate-200 text-slate-700">In lab · not issued</Badge>}
+          {osc.holder ? <Badge className="bg-emerald-100 text-emerald-700">Issued to {(studentById(osc.holder) || {}).name || osc.holder}</Badge> : <Badge className="bg-slate-200 text-slate-700">In lab · not issued</Badge>}
         </div>
         <Btn v="outline" size="sm" className="mt-3 w-full" icon="zap" onClick={() => mutate((d) => equipmentLeaving(d, 'osc4'))}>Simulate: Oscilloscope #4 passes lab door</Btn>
       </Card>
@@ -203,6 +214,7 @@ function Visitors() {
 
       <div>
         <SectionTitle>Active visitors ({active.length})</SectionTitle>
+        {active.length === 0 && <Card className="text-center text-sm text-slate-500">No visitors registered. Create a pass above when someone is expected.</Card>}
         <div className="space-y-2">
           {active.map((v) => (
             <Card key={v.id} className="fade-up p-3">
@@ -217,7 +229,7 @@ function Visitors() {
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <Btn size="sm" v="soft" icon="qr" onClick={() => setShow(v.id)}>Show pass</Btn>
                 {v.status === 'expected'
-                  ? <Btn size="sm" v="outline" icon="login" onClick={() => mutate((d) => { d.visitors.find((x) => x.id === v.id).status = 'inside'; toast(d, 'admin', `${v.name} checked in at Main Gate`, 'success'); })}>Check in</Btn>
+                  ? <Btn size="sm" v="outline" icon="login" onClick={() => mutate((d) => { const vv = d.visitors.find((x) => x.id === v.id); vv.status = 'inside'; vv.checkedInAt = Date.now(); toast(d, 'admin', `${v.name} checked in at Main Gate`, 'success'); })}>Check in</Btn>
                   : <Btn size="sm" v="outline" icon="logout" onClick={() => mutate((d) => { d.visitors.find((x) => x.id === v.id).status = 'left'; toast(d, 'admin', `${v.name} checked out. Pass closed`, 'info'); })}>Check out</Btn>}
               </div>
             </Card>
@@ -236,7 +248,7 @@ function VisitorPass({ v, onClose }) {
   return (
     <Sheet title="Visitor pass" onClose={onClose}>
       <div className="flex flex-col items-center">
-        <div className="w-full rounded-2xl bg-gradient-to-r from-[#0b2a35] to-[#060c11] p-4 text-white ring-1 ring-brand/25">
+        <div className="w-full rounded-2xl bg-gradient-to-r from-brand/15 to-[#060c11] p-4 text-white ring-1 ring-brand/25">
           <div className="text-xs text-white/65">Temporary pass · {v.id}</div>
           <div className="text-lg font-bold">{v.name}</div>
           <div className="text-sm text-white/80">{v.purpose} · {v.dest}</div>
@@ -309,11 +321,15 @@ function StockReport({ onClose }) {
   const out = s.issued.filter((i) => i.status === 'issued');
   const yr = new Date(now).getFullYear();
   const ay = new Date(now).getMonth() >= 6 ? `${yr}–${String(yr + 1).slice(2)}` : `${yr - 1}–${String(yr).slice(2)}`;
+  // Opening = the lab's stock register when Kavach started; issued/returned are counted from LabLedger.
+  const qty = (id, f) => s.issued.filter((x) => x.itemId === id && f(x)).reduce((a, b) => a + b.qty - (f === back ? b.missing || 0 : 0), 0);
+  const back = (x) => x.status !== 'issued';
   const rows = s.inventory.map((i) => {
-    if (i.rfid) return { name: i.name, open: 1, issued: '-', now: i.holder ? 0 : 1, status: i.holder ? `With ${i.holder}` : 'Located ✓' };
-    const [opening, issuedYr] = s.yearly[i.id];
-    return { name: i.name, open: opening, issued: issuedYr, now: i.stock, status: i.stock < i.min ? 'Reorder' : 'OK' };
+    if (i.rfid) return { name: i.name, open: 1, issued: s.issued.filter((x) => x.itemId === i.id).length, now: i.holder ? 0 : 1, status: i.holder ? `With ${i.holder}` : 'In lab ✓' };
+    return { name: i.name, open: i.open ?? i.stock, issued: qty(i.id, () => true), now: i.stock, status: i.stock < i.min ? 'Reorder' : 'OK' };
   });
+  const issuesN = s.issued.length;
+  const returnsN = s.issued.filter(back).length;
   return (
     <Sheet title="Stock verification report" onClose={onClose} tall>
       <div className="print-area">
@@ -322,7 +338,7 @@ function StockReport({ onClose }) {
           <div className="mt-1 text-xs text-slate-500">Electronics Lab · {COLLEGE} · AY {ay}</div>
           <div className="text-xs text-slate-500">Generated {fmtDay(now, now)} {new Date(now).toLocaleDateString('en-IN')}, {fmtTime(now)} by Kavach</div>
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-            {[[s.inventory.length, 'Items verified'], [2, 'RFID located'], [short.length, 'Short returns']].map(([v, k]) => (
+            {[[s.inventory.length, 'Items in register'], [issuesN, 'Issues logged'], [short.length, 'Short returns']].map(([v, k]) => (
               <div key={k} className="rounded-xl bg-card p-2 ring-1 ring-slate-200"><div className="text-lg font-extrabold text-slate-900">{v}</div><div className="text-[10px] text-slate-500">{k}</div></div>
             ))}
           </div>
@@ -335,10 +351,9 @@ function StockReport({ onClose }) {
             </tbody>
           </table>
           <ul className="mt-3 list-disc space-y-1 pl-4 text-xs text-slate-600">
-            <li>1,284 issues and 1,251 returns counted automatically by shelf weight sensors.</li>
-            <li>{out.length} item record{out.length === 1 ? '' : 's'} currently with students. Due before semester end.</li>
-            <li>{short.length ? `${short.length} short return(s) declared by students: ${short.map((x) => `${x.missing} × ${x.name}`).join(', ')}.` : 'No unexplained losses this year.'}</li>
-            <li>Both RFID instruments seen by lab door reader in the last 24 h.</li>
+            <li>{issuesN} issue{issuesN === 1 ? '' : 's'} and {returnsN} return{returnsN === 1 ? '' : 's'} recorded in LabLedger.</li>
+            <li>{out.length} item record{out.length === 1 ? '' : 's'} currently with students.</li>
+            <li>{short.length ? `${short.length} short return(s) declared by students: ${short.map((x) => `${x.missing} × ${x.name}`).join(', ')}.` : 'No short returns recorded.'}</li>
           </ul>
           <div className="mt-4 grid grid-cols-2 gap-4 text-[11px] text-slate-500">
             <div className="border-t border-slate-300 pt-1">Lab In-charge</div>
@@ -360,12 +375,17 @@ function TwinTab({ openCam, openCc }) {
   const [layers, setLayers] = useState({ cams: true, alerts: true, heat: true, guards: true, walk: true, labels: false });
   const [sel, setSel] = useState(null);
   const api = useRef(null);
-  const heat = heatFor(s);
-  const live = {};
-  for (const a of s.alerts) if (!a.seed) live[a.cp] = (live[a.cp] || 0) + 1;
+  const heat = heatFrom(s);
   const ranked = Object.entries(heat).sort((a, b) => b[1] - a[1]);
-  const max = ranked[0][1];
-  const top = { GATE: 'Tailgating', WALL: 'Wall crossing', B: 'Follower', D: 'Visitor zone', C: 'Camera tamper', LAB: 'Equipment exit', A: 'Loitering', ADMIN: 'Visitor zone' };
+  const max = ranked.length ? ranked[0][1] : 1;
+  // most common alert type per zone, from the recorded alerts
+  const top = {};
+  for (const [cp] of ranked) {
+    const c = {};
+    for (const a of s.alerts) if (a.cp === cp) c[a.type] = (c[a.type] || 0) + 1;
+    top[cp] = ALERT_TYPES[Object.entries(c).sort((x, y) => y[1] - x[1])[0][0]].label;
+  }
+  const today = new Date(); today.setHours(0, 0, 0, 0);
   const selCam = sel && sel.startsWith('cam:') ? sel.slice(4) : null;
   const onPick = (id) => {
     setSel(id);
@@ -387,7 +407,7 @@ function TwinTab({ openCam, openCc }) {
         {selCam ? (
           <div className="flex items-center gap-3 p-3">
             <div className="w-28 shrink-0"><CameraFeed camId={selCam} detections={false} showMeta={false} /></div>
-            <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold text-slate-900">{selCam}</div><div className="text-xs text-slate-500">{CAM_STATUS[s.cams[selCam].status].label}</div></div>
+            <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold text-slate-900">{selCam}</div><div className="text-xs text-slate-500">{CAM_STATUS[camStatus(s, selCam)].label}</div></div>
             <Btn size="sm" icon="video" onClick={() => openCam(selCam)}>Open</Btn>
           </div>
         ) : (
@@ -397,22 +417,25 @@ function TwinTab({ openCam, openCc }) {
       <div>
         <SectionTitle>Alert heatmap by zone</SectionTitle>
         <Card className="space-y-3">
+          {ranked.length === 0 && <p className="py-4 text-center text-sm text-slate-500">No alerts recorded yet. Zones fill in as alerts come in.</p>}
           {ranked.map(([id, n]) => (
             <div key={id}>
               <div className="flex items-center justify-between text-sm">
                 <span className="font-semibold text-slate-900">{CP[id].name}</span>
-                <span className="tabular-nums text-slate-600"><b className="text-slate-900">{n}</b>{live[id] ? <span className="ml-1 text-xs font-semibold text-red-600">+{live[id]} today</span> : null}</span>
+                <span className="tabular-nums text-slate-600"><b className="text-slate-900">{n}</b>{(() => { const t = s.alerts.filter((a) => a.cp === id && a.time >= today.getTime()).length; return t ? <span className="ml-1 text-xs font-semibold text-red-600">{t} today</span> : null; })()}</span>
               </div>
               <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100"><div className="grow h-full rounded-full bg-gradient-to-r from-accent to-coral" style={{ width: `${(n / max) * 100}%` }} /></div>
-              <div className="mt-0.5 text-[11px] text-slate-500">Mostly: {top[id]} · last 30 days + live</div>
+              <div className="mt-0.5 text-[11px] text-slate-500">Mostly: {top[id]}</div>
             </div>
           ))}
         </Card>
       </div>
-      <Card className="flex items-start gap-3 bg-brand-50 ring-brand-100">
-        <Icon name="bulb" className="mt-0.5 h-5 w-5 text-brand" />
-        <p className="text-sm text-slate-700"><b>Suggestion:</b> add a second guard at the Main Gate 8–9 am and a third thermal camera on the east wall.</p>
-      </Card>
+      {ranked.length > 0 && (
+        <Card className="flex items-start gap-3 bg-brand-50 ring-brand-100">
+          <Icon name="bulb" className="mt-0.5 h-5 w-5 text-brand" />
+          <p className="text-sm text-slate-700"><b>Busiest zone:</b> {CP[ranked[0][0]].name} with {ranked[0][1]} alert{ranked[0][1] === 1 ? '' : 's'}, mostly {top[ranked[0][0]].toLowerCase()}. Consider a guard post or another camera there.</p>
+        </Card>
+      )}
     </div>
   );
 }
@@ -422,19 +445,18 @@ function Audit() {
   const { s, now } = useApp();
   const [cat, setCat] = useState('all');
   const list = s.audit.filter((a) => cat === 'all' || a.cat === cat);
-  const m = s.monthly;
-  const month = new Date(now).toLocaleDateString('en-IN', { month: 'long' });
+  const m = transparency(s);
   return (
     <div className="space-y-4 p-4 pb-8">
-      <div className="rounded-3xl bg-gradient-to-br from-[#0b2a35] to-[#060c11] ring-1 ring-brand/25 p-5 text-white shadow-md">
-        <div className="text-xs font-bold uppercase tracking-wider text-accent">Transparency · {month}</div>
-        <p className="mt-2 text-lg font-bold leading-snug">{m.walks} walks, {m.followers} follower alerts, {m.faceSearches} face searches, {m.unblurs} unblurs reviewed by the student committee.</p>
+      <div className="rounded-3xl bg-gradient-to-br from-brand/15 to-[#060c11] ring-1 ring-brand/25 p-5 text-white shadow-md">
+        <div className="text-xs font-bold uppercase tracking-wider text-accent">Transparency report</div>
+        <p className="mt-2 text-lg font-bold leading-snug">{m.walks} walk{m.walks === 1 ? '' : 's'}, {m.followers} follower alert{m.followers === 1 ? '' : 's'}, {m.faceSearches} face searches, {m.unblurs} unblur request{m.unblurs === 1 ? '' : 's'} sent to the student committee.</p>
         <div className="mt-4 grid grid-cols-4 gap-2 text-center">
           {[[m.walks, 'Walks'], [m.followers, 'Follower alerts'], [m.faceSearches, 'Face searches'], [m.unblurs, 'Unblurs']].map(([v, k]) => (
             <div key={k} className="rounded-xl bg-white/10 px-1 py-2"><div className="text-xl font-extrabold">{v}</div><div className="text-[10px] leading-tight text-white/80">{k}</div></div>
           ))}
         </div>
-        <p className="mt-3 text-xs text-white/65">Published to students every month. Face search is switched off by design.</p>
+        <p className="mt-3 text-xs text-white/65">Counted from activity recorded on this device. {m.views} footage view{m.views === 1 ? '' : 's'} logged. Face search does not exist in Kavach.</p>
       </div>
       <div>
         <SectionTitle>Audit log</SectionTitle>
@@ -444,6 +466,7 @@ function Audit() {
           ))}
         </div>
         <Card className="divide-y divide-slate-100 p-0">
+          {list.length === 0 && <p className="p-4 text-center text-sm text-slate-500">Nothing logged yet. Every camera view, snapshot, unblur request and lookup appears here.</p>}
           {list.map((a) => (
             <div key={a.id} className="fade-up flex gap-3 px-4 py-3">
               <span className={cls('mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg', a.cat === 'footage' ? 'bg-red-50 text-red-600' : a.cat === 'system' ? 'bg-slate-100 text-slate-600' : 'bg-brand-50 text-brand')}>

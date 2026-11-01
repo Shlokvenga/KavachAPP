@@ -1,4 +1,5 @@
-// Mock data, constants and small helpers. Everything here is fake demo data.
+// Constants, campus setup and small helpers. There is no pre-filled activity:
+// every alert, scan, walk, visitor and statistic comes from what happens in the app.
 import { CAMERAS, CHECKPOINTS, GUARD_POSTS, camsAt } from './campus.js';
 
 export const MIN = 60 * 1000;
@@ -6,15 +7,23 @@ export const HOUR = 60 * MIN;
 export const ESCALATE_MS = 2 * MIN;
 export const QR_PERIOD = 10; // seconds
 
-export const STUDENT = {
-  name: 'Priya Sharma',
-  first: 'Priya',
-  id: '21BRS045',
-  dept: 'Electronics & Communication',
-  year: '3rd year',
-  phone: '+91 98450 21045',
-  hostel: 'Girls Hostel, Room 214',
-  blood: 'B+',
+// The two demo students the student app can sign in as. Female uses the pink
+// theme and the Girls Hostel; male uses the blue theme and the Boys Hostel.
+export const STUDENTS = {
+  female: {
+    gender: 'female', name: 'Priya Sharma', first: 'Priya', id: '21BRS045', dept: 'Electronics & Communication', year: '3rd year',
+    phone: '+91 98450 21045', hostel: 'Girls Hostel, Room 214', home: 'D',
+  },
+  male: {
+    gender: 'male', name: 'Aarav Kulkarni', first: 'Aarav', id: '21BRS018', dept: 'Computer Science & Engineering', year: '3rd year',
+    phone: '+91 98450 21018', hostel: 'Boys Hostel, Room 108', home: 'E',
+  },
+};
+export const studentOf = (s) => STUDENTS[s.gender] || STUDENTS.female;
+export const studentById = (id) => Object.values(STUDENTS).find((x) => x.id === id) || null;
+export const GENDER = {
+  female: { label: 'Female', theme: 'theme-female', chip: 'bg-pink-500/15 text-pink-300 ring-1 ring-pink-400/40', dot: 'bg-pink-400' },
+  male: { label: 'Male', theme: 'theme-male', chip: 'bg-blue-500/15 text-blue-300 ring-1 ring-blue-400/40', dot: 'bg-blue-400' },
 };
 
 export const COLLEGE = 'KLE Technological University';
@@ -23,12 +32,12 @@ export const COLLEGE_SHORT = 'KLE Tech, Hubballi';
 // Checkpoints come from the campus model (src/campus.js).
 export const CP = Object.fromEntries(Object.entries(CHECKPOINTS).map(([id, c]) => [id, { id, ...c }]));
 
-export const cpShort = (id) => (['A', 'B', 'C', 'D'].includes(id) ? CP[id].tag : CP[id].name);
+export const cpShort = (id) => (['A', 'B', 'C', 'D', 'E'].includes(id) ? CP[id].tag : CP[id].name);
 
 export const GUARDS = [
   { id: 'ramesh', name: 'Ramesh', post: 'Main Gate', ...GUARD_POSTS.ramesh },
-  { id: 'sunita', name: 'Sunita', post: 'Girls Hostel', ...GUARD_POSTS.sunita },
-  { id: 'imran', name: 'Imran', post: 'Library', ...GUARD_POSTS.imran },
+  { id: 'sunita', name: 'Sunita', post: 'Girls Hostel', female: true, ...GUARD_POSTS.sunita },
+  { id: 'imran', name: 'Imran', post: 'Boys Hostel', ...GUARD_POSTS.imran },
 ];
 
 export const ROUTES = {
@@ -42,6 +51,17 @@ export const ROUTES = {
       { cp: 'B', mins: 3 },
       { cp: 'C', mins: 4 },
       { cp: 'D', mins: 3 },
+    ],
+  },
+  E: {
+    dest: 'Boys Hostel',
+    sub: 'Via Workshop Path',
+    guard: 'imran',
+    finalScan: 'hostel QR',
+    steps: [
+      { cp: 'A', mins: 0 },
+      { cp: 'B', mins: 3 },
+      { cp: 'E', mins: 4 },
     ],
   },
   GATE: {
@@ -142,76 +162,75 @@ export function verifyQr(text, now = Date.now()) {
   return { ok: true, id };
 }
 
-// ---------- initial state ----------
-export function makeInitial() {
-  const now = Date.now();
-  const at = (daysAgo, h, m) => { const x = new Date(now); x.setDate(x.getDate() - daysAgo); x.setHours(h, m, 0, 0); return x.getTime(); };
-  const base = { seed: true, escalated: false, lights: false, speaker: false, photo: null, walk: false };
+// ---------- initial state (empty) ----------
+// Only campus setup is here: guards on duty, the camera registry and the lab's
+// stock register. Everything else starts empty.
+export const LAB_ITEMS = [
+  { id: 'res220', name: 'Resistor 220 Ω', short: 'resistor', stock: 500, min: 100, gram: 0.25, kind: 'consumable', shelf: 'E-3' },
+  { id: 'ledr', name: 'LED (red)', short: 'LED', stock: 300, min: 80, gram: 0.3, kind: 'consumable', shelf: 'E-3' },
+  { id: 'uno', name: 'Arduino Uno', short: 'Arduino Uno', stock: 20, min: 8, gram: 25, kind: 'consumable', shelf: 'E-4' },
+  { id: 'ultra', name: 'Ultrasonic sensor', short: 'ultrasonic sensor', stock: 25, min: 10, gram: 8.5, kind: 'consumable', shelf: 'E-4' },
+  { id: 'osc4', name: 'Oscilloscope #4', short: 'Oscilloscope #4', stock: 1, min: 0, kind: 'instrument', rfid: 'RF-0A4C', bench: 'Bench 6', holder: null },
+  { id: 'dmm7', name: 'Digital Multimeter #7', short: 'Multimeter #7', stock: 1, min: 0, kind: 'instrument', rfid: 'RF-11D7', bench: 'Bench 2', holder: null },
+];
+
+export const STATE_VERSION = 4;
+export function makeInitial(gender = 'female') {
   return {
-    seq: 1040,
-    lastDrift: now,
-    inside: 1247,
-    entriesToday: 3382,
-    gate: {
-      dir: 'OUT',
-      log: [
-        { id: 'g6', dir: 'OUT', place: 'Main Gate', time: at(1, 18, 14) },
-        { id: 'g5', dir: 'OUT', place: 'ECE Electronics Lab', time: at(1, 16, 3) },
-        { id: 'g4', dir: 'IN', place: 'ECE Electronics Lab', time: at(1, 14, 1) },
-        { id: 'g3', dir: 'OUT', place: 'Central Library', time: at(1, 12, 40) },
-        { id: 'g2', dir: 'IN', place: 'Central Library', time: at(1, 10, 22) },
-        { id: 'g1', dir: 'IN', place: 'Main Gate', time: at(1, 8, 47) },
-        { id: 'g0', dir: 'OUT', place: 'Main Gate', time: at(2, 17, 40) },
-      ],
-    },
+    v: STATE_VERSION,
+    seq: 1000,
+    gender,
+    gate: { dirs: {}, log: [] },
     walk: null,
     walksCompleted: 0,
-    otherWalks: [
-      { id: 'w1', name: 'Ananya K.', dest: 'Girls Hostel', at: 'C', progress: 0.7, started: now - 7 * MIN },
-      { id: 'w2', name: 'Rahul M.', dest: 'Main Gate (PB Road)', at: 'ADMIN', progress: 0.5, started: now - 3 * MIN },
-    ],
     guards: GUARDS.map((g) => ({ ...g })),
-    alerts: [
-      { ...base, id: 'AL-1038', type: 'tamper', cp: 'C', cam: 'CAM-C2', detail: 'CAM-C2 view blocked for 40 s.', time: now - 47 * MIN, status: 'resolved', assigned: 'imran', acceptedBy: 'imran', resolvedBy: 'imran', resolvedAt: now - 35 * MIN, note: 'Leaf stuck on lens. Cleaned.' },
-      { ...base, id: 'AL-1035', type: 'tailgate', cp: 'GATE', cam: 'CAM-G2', detail: 'Two people entered on one scan, Lane 2.', time: now - 2 * HOUR, status: 'resolved', assigned: 'ramesh', acceptedBy: 'ramesh', resolvedBy: 'ramesh', resolvedAt: now - 2 * HOUR + 4 * MIN, note: 'Second person was a visitor with a valid pass.' },
-    ],
-    inventory: [
-      { id: 'res220', name: 'Resistor 220 Ω', short: 'resistor', stock: 500, min: 100, gram: 0.25, kind: 'consumable', shelf: 'E-3' },
-      { id: 'ledr', name: 'LED (red)', short: 'LED', stock: 300, min: 80, gram: 0.3, kind: 'consumable', shelf: 'E-3' },
-      { id: 'uno', name: 'Arduino Uno', short: 'Arduino Uno', stock: 20, min: 8, gram: 25, kind: 'consumable', shelf: 'E-4' },
-      { id: 'ultra', name: 'Ultrasonic sensor', short: 'ultrasonic sensor', stock: 25, min: 30, gram: 8.5, kind: 'consumable', shelf: 'E-4' },
-      { id: 'osc4', name: 'Oscilloscope #4', short: 'Oscilloscope #4', stock: 1, min: 0, kind: 'instrument', rfid: 'RF-0A4C', bench: 'Bench 6', holder: null },
-      { id: 'dmm7', name: 'Digital Multimeter #7', short: 'Multimeter #7', stock: 1, min: 0, kind: 'instrument', rfid: 'RF-11D7', bench: 'Bench 2', holder: null },
-    ],
-    yearly: { res220: [1200, 820], ledr: [800, 510], uno: [30, 14], ultra: [40, 19] }, // [opening + received, issued this year]
-    issued: [
-      { id: 'IS-1021', itemId: 'uno', name: 'Arduino Uno', qty: 1, time: at(1, 15, 10), status: 'issued' },
-      { id: 'IS-1012', itemId: 'ledr', name: 'LED (red)', qty: 6, time: at(4, 11, 30), status: 'returned', returnedAt: at(4, 13, 2) },
-    ],
-    sessions: [
-      { id: 'SE-77', label: 'Oscilloscope #4', bench: 'Bench 6', slot: '2 to 4 pm', day: 'Today', status: 'normal' },
-      { id: 'SE-71', label: 'Digital Multimeter #7', bench: 'Bench 2', slot: '11 am to 12 pm', day: 'Mon', status: 'normal' },
-    ],
+    alerts: [],
+    inventory: LAB_ITEMS.map((i) => ({ ...i, open: i.stock })),
+    issued: [],
     disputes: [],
     returnCount: 0,
-    visitors: [
-      { id: 'V-201', name: 'Rakesh Gupta', phone: '98201 44718', purpose: 'Delivery', dest: 'ECE Electronics Lab', from: '10:00', to: '13:00', status: 'inside', created: now - 50 * MIN },
-      { id: 'V-202', name: 'Anjali Nair', phone: '99860 31207', purpose: 'Parent visit', dest: 'Main Building', from: '11:30', to: '12:30', status: 'expected', created: now - 20 * MIN },
-    ],
-    audit: [
-      { id: 'au6', who: 'Guard Ramesh', action: 'Viewed live feed CAM-G2 · Main Gate', reason: 'Live monitoring (on duty)', cat: 'footage', time: now - 40 * MIN },
-      { id: 'au5', who: 'Guard Imran', action: 'Viewed 10 s clip CAM-A1 · Library entrance', reason: 'Responding to alert AL-1031', cat: 'footage', time: now - 2 * HOUR - 8 * MIN },
-      { id: 'au4', who: 'System', action: 'Auto-deleted 38 Saathi Walk photos', reason: 'All walkers reached safely last night', cat: 'system', time: now - 9 * HOUR },
-      { id: 'au3', who: 'Lab In-charge (Dr. Mehta)', action: 'Looked up issue record · 21BRS045', reason: 'Overdue item check', cat: 'lookup', time: now - 26 * HOUR },
-      { id: 'au2', who: 'Security Head (Mr. Rao)', action: 'Unblurred clip CAM-B1 · Workshop Path', reason: 'Bike theft complaint T-12. Approved by student committee', cat: 'footage', time: now - 3 * 24 * HOUR },
-      { id: 'au1', who: 'Admin (Ms. Kulkarni)', action: 'Exported monthly transparency report', reason: 'Student council meeting', cat: 'lookup', time: now - 5 * 24 * HOUR },
-    ],
-    heatBase: { GATE: 14, WALL: 9, B: 7, D: 6, C: 4, LAB: 3, A: 2, ADMIN: 1 },
-    cams: Object.fromEntries(CAMERAS.map((c) => [c.id, { status: 'online', zoom: 1, pan: 0, since: now - 6 * 24 * HOUR }])),
-    camEvents: 1286, // analytics events today (behaviour only)
-    ai: { events: 0, byRule: {}, gate: [] },
+    visitors: [],
+    audit: [],
+    // camera status in state is only what happened to it (tampered / offline);
+    // "live" means a real camera is connected on this device (see vision/live.js)
+    cams: Object.fromEntries(CAMERAS.map((c) => [c.id, { status: 'none', zoom: 1, pan: 0, since: null }])),
+    ai: { events: 0, byRule: {}, gate: [], used: [] },
     darkSpots: [],
-    monthly: { walks: 214, followers: 3, faceSearches: 0, unblurs: 2 },
     toasts: [],
   };
+}
+
+// ---------- statistics, always computed from recorded activity ----------
+const startOfDay = (now = Date.now()) => { const d = new Date(now); d.setHours(0, 0, 0, 0); return d.getTime(); };
+export const presence = (s, sid) => s.gate.dirs[sid] || 'OUT';
+export const myLog = (s) => s.gate.log.filter((l) => l.sid === studentOf(s).id);
+export function campusStats(s, now = Date.now()) {
+  const today = startOfDay(now);
+  const studentsIn = Object.values(s.gate.dirs).filter((d) => d === 'IN').length;
+  const visitorsIn = s.visitors.filter((v) => v.status === 'inside').length;
+  return {
+    inside: studentsIn + visitorsIn,
+    studentsIn,
+    visitorsIn,
+    entriesToday: s.gate.log.filter((l) => l.dir === 'IN' && l.time >= today).length + s.visitors.filter((v) => v.checkedInAt && v.checkedInAt >= today).length,
+    walksActive: s.walk && s.walk.phase === 'active' ? 1 : 0,
+    openAlerts: s.alerts.filter((a) => a.status !== 'resolved').length,
+    escalated: s.alerts.filter((a) => a.status !== 'resolved' && a.escalated).length,
+    labIssued: s.issued.filter((i) => i.status === 'issued').reduce((a, b) => a + b.qty, 0),
+    visitors: s.visitors.filter((v) => v.status !== 'left').length,
+  };
+}
+export function transparency(s) {
+  return {
+    walks: s.walksCompleted + (s.walk && s.walk.phase === 'active' ? 1 : 0),
+    followers: s.alerts.filter((a) => a.type === 'follower').length,
+    faceSearches: 0, // there is no face search in Kavach
+    unblurs: s.audit.filter((a) => a.action.startsWith('Requested unblur')).length,
+    views: s.audit.filter((a) => a.cat === 'footage').length,
+  };
+}
+export function heatFrom(s) {
+  const heat = {};
+  for (const a of s.alerts) heat[a.cp] = (heat[a.cp] || 0) + 1;
+  return heat;
 }

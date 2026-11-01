@@ -2,7 +2,7 @@
 // alert blocks, face enrolment and the real 1:1 gate check.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { CAMERAS } from '../campus.js';
-import { STUDENT, cls, fmtTime } from '../data.js';
+import { cls, fmtTime, presence, studentOf } from '../data.js';
 import { gateFaceResult, useApp, toast } from '../store.js';
 import { Badge, Btn, Card, Icon, Sheet } from '../ui.jsx';
 import { MODELS, aiSupported, loadVision, subscribeVision, vision, visionVersion } from './engine.js';
@@ -143,14 +143,14 @@ function RuleEditor({ slot }) {
     <div className="fade-up mt-2 space-y-1.5 border-t border-line pt-2">
       {Object.entries(RULES).map(([k, r]) => (
         <label key={k} className="flex items-center gap-2 text-xs">
-          <input type="checkbox" checked={!!cfg.enabled[k]} onChange={(e) => set((c) => { c.enabled[k] = e.target.checked; })} className="accent-[#00e5ff]" />
+          <input type="checkbox" checked={!!cfg.enabled[k]} onChange={(e) => set((c) => { c.enabled[k] = e.target.checked; })} className="accent-brand" />
           <span className="font-semibold text-slate-800">{r.name}</span>
           <span className="truncate text-slate-500">{r.about}</span>
         </label>
       ))}
       <label className="flex items-center gap-2 pt-1 text-xs text-slate-600">
         Sensitivity
-        <input type="range" min="0.5" max="1.5" step="0.1" value={cfg.sensitivity} onChange={(e) => set((c) => { c.sensitivity = +e.target.value; })} className="flex-1 accent-[#00e5ff]" />
+        <input type="range" min="0.5" max="1.5" step="0.1" value={cfg.sensitivity} onChange={(e) => set((c) => { c.sensitivity = +e.target.value; })} className="flex-1 accent-brand" />
         <span className="w-8 font-mono">{cfg.sensitivity.toFixed(1)}</span>
       </label>
     </div>
@@ -192,8 +192,9 @@ function useSelfCam(active) {
 
 export function FaceEnrolPage({ onBack }) {
   useVision();
-  const { mutate } = useApp();
-  const [tpl, setTpl] = useState(() => loadTemplate(STUDENT.id));
+  const { s, mutate } = useApp();
+  const me = studentOf(s);
+  const [tpl, setTpl] = useState(() => loadTemplate(me.id));
   const [cam, setCam] = useState(false);
   const [busy, setBusy] = useState(null);
   const [res, setRes] = useState(null);
@@ -201,7 +202,7 @@ export function FaceEnrolPage({ onBack }) {
   const go = async () => {
     setRes(null); setBusy('Hold still…');
     try {
-      const r = await enrol(video.current, STUDENT.id, (i) => setBusy(`Reading your face ${i}/4…`));
+      const r = await enrol(video.current, me.id, (i) => setBusy(`Reading your face ${i}/4…`));
       setRes(r);
       if (r.ok) { setTpl(r.template); setCam(false); mutate((d) => toast(d, 'student', 'Face enrolled on this phone for 1:1 gate checks', 'success')); }
     } catch (e) { setRes({ ok: false, problems: [e.message] }); }
@@ -226,7 +227,7 @@ export function FaceEnrolPage({ onBack }) {
           <Card className="flex items-center gap-3 bg-emerald-50 ring-emerald-200">
             <Icon name="checkCircle" className="h-6 w-6 text-emerald-700" />
             <div className="flex-1 text-sm"><div className="font-semibold text-slate-900">Face enrolled</div><div className="text-xs text-slate-600">{fmtTime(tpl.enrolledAt)} · {tpl.samples} samples · quality {tpl.quality}</div></div>
-            <Btn size="sm" v="outline" onClick={() => { deleteTemplate(STUDENT.id); setTpl(null); }}>Delete</Btn>
+            <Btn size="sm" v="outline" onClick={() => { deleteTemplate(me.id); setTpl(null); }}>Delete</Btn>
           </Card>
         )}
         {!aiSupported() && <Card className="text-sm text-amber-800">Needs the Android app or <span className="font-mono">npm run serve</span>.</Card>}
@@ -253,17 +254,18 @@ export function FaceEnrolPage({ onBack }) {
 export function GateCheckSheet({ onClose }) {
   useVision();
   const { s, mutate } = useApp();
-  const stateDir = useRef(s.gate.dir);
-  stateDir.current = s.gate.dir;
+  const me = studentOf(s);
+  const stateDir = useRef(presence(s, me.id));
+  stateDir.current = presence(s, me.id);
   const [video, err] = useSelfCam(true);
   const [busy, setBusy] = useState(null);
   const [res, setRes] = useState(null);
   const go = async () => {
     setRes(null); setBusy('Checking…');
     try {
-      const r = await verify(video.current, STUDENT.id, (i) => setBusy(`Frame ${i}/3…`));
+      const r = await verify(video.current, me.id, (i) => setBusy(`Frame ${i}/3…`));
       const dir = r.ok ? (stateDir.current === 'IN' ? 'OUT' : 'IN') : null;
-      mutate((d) => { gateFaceResult(d, r); toast(d, 'guard', r.ok ? `Gate face check: ${STUDENT.id} matched 1:1 (${(r.sim * 100).toFixed(0)}%)` : r.decision === 'MANUAL CHECK' ? `Gate: ${STUDENT.id} needs a manual ID check (${(r.sim * 100).toFixed(0)}%)` : `Gate face check rejected: ${r.reasons[0]}`, r.ok ? 'success' : 'alert'); });
+      mutate((d) => { gateFaceResult(d, r); toast(d, 'guard', r.ok ? `Gate face check: ${me.name} matched 1:1 (${(r.sim * 100).toFixed(0)}%)` : r.decision === 'MANUAL CHECK' ? `Gate: ${me.name} needs a manual ID check (${(r.sim * 100).toFixed(0)}%)` : `Gate face check rejected: ${r.reasons[0]}`, r.ok ? 'success' : 'alert'); });
       setRes({ ...r, dir });
     } catch (e) { setRes({ ok: false, decision: 'ERROR', reasons: [e.message] }); }
     setBusy(null);
@@ -292,7 +294,7 @@ export function GateCheckSheet({ onClose }) {
         </div>
       )}
       <Btn className="mt-3 w-full" icon="scan" disabled={!!busy || vision.status !== 'ready'} onClick={go}>{busy || (vision.status === 'ready' ? 'Verify me at the gate' : 'Loading AI…')}</Btn>
-      <p className="mt-2 text-center text-[11px] text-slate-500">Compared only with the face enrolled for {STUDENT.id}, on this device.</p>
+      <p className="mt-2 text-center text-[11px] text-slate-500">Compared only with the face enrolled for {me.name} ({me.id}), on this device.</p>
     </Sheet>
   );
 }

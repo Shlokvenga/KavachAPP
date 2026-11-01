@@ -231,4 +231,15 @@ function loop(slot) {
 }
 
 export const liveCount = () => Object.keys(live).length;
+
+// Anonymised frame from any connected camera at a checkpoint (for Saathi Walk
+// check-ins). Returns null when no real camera is connected there.
+export function snapshotAt(cp) {
+  const s = Object.values(live).find((x) => x.cam.cp === cp && x.stats.lastInfer);
+  if (!s) return null;
+  const c = document.createElement('canvas'); c.width = 320; c.height = 180;
+  c.getContext('2d').drawImage(s.out, 0, 0, 320, 180);
+  return c.toDataURL('image/jpeg', 0.7);
+}
+export const liveAt = (cp) => Object.values(live).filter((x) => x.cam.cp === cp).map((x) => x.camId);
 export { center };

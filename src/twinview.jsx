@@ -2,10 +2,11 @@
 // state, and falls back to the 2D map if WebGL or the bundle is unavailable.
 import { useEffect, useRef, useState } from 'react';
 import { CAMERAS, CAMPUS_SHORT } from './campus.js';
-import { ALERT_TYPES, CP, camById, cls, fmtTime } from './data.js';
+import { ALERT_TYPES, CP, camById, campusStats, cls, fmtTime, heatFrom } from './data.js';
+import { isLive } from './vision/live.js';
 import { useApp } from './store.js';
 import CampusMap from './map.jsx';
-import { CAM_STATUS, CamTile, CameraFeed, CameraViewer } from './cctv.jsx';
+import { CAM_STATUS, CamTile, CameraFeed, CameraViewer, camStatus } from './cctv.jsx';
 import { Badge, Btn, Icon, LiveDot, Logo } from './ui.jsx';
 
 let loading = null;
@@ -23,11 +24,6 @@ function loadTwin() {
   return loading;
 }
 
-export function heatFor(s) {
-  const heat = { ...s.heatBase };
-  for (const a of s.alerts) if (!a.seed) heat[a.cp] = (heat[a.cp] || 0) + 1;
-  return heat;
-}
 
 export function twinData(s, layers, selected) {
   const w = s.walk && s.walk.phase === 'active' ? s.walk : null;
@@ -35,11 +31,11 @@ export function twinData(s, layers, selected) {
   return {
     layers,
     selected,
-    cams: Object.fromEntries(Object.entries(s.cams).map(([k, v]) => [k, v.status])),
+    cams: Object.fromEntries(CAMERAS.map((c) => [c.id, camStatus(s, c.id)])),
     alerts: s.alerts.filter((a) => a.status !== 'resolved').map((a) => ({ id: a.id, cp: a.cp, pri: ALERT_TYPES[a.type].pri, label: ALERT_TYPES[a.type].label })),
     guards: s.guards.map((g) => ({ id: g.id, name: g.name, x: g.x, y: g.y })),
     walk: w ? { route: w.steps.map((x) => x.cp), at: last && last.cp } : null,
-    heat: layers.heat ? heatFor(s) : null,
+    heat: layers.heat ? heatFrom(s) : null,
   };
 }
 
@@ -75,7 +71,7 @@ export function Twin({ data, onPick, apiRef, className }) {
         <div className="absolute inset-0 overflow-auto bg-raise p-2">
           <div className="mb-1 px-1 text-[11px] font-semibold text-slate-500">3D view needs WebGL. Showing the 2D map.</div>
           <CampusMap alerts={data.layers.alerts !== false ? s.alerts : []} guards={data.layers.guards !== false ? s.guards : []} walk={data.layers.walk !== false ? s.walk : null}
-            heat={data.heat} showCams={data.layers.cams !== false} cams={s.cams} onCam={(id) => onPick && onPick('cam:' + id)} />
+            heat={data.heat} showCams={data.layers.cams !== false} cams={Object.fromEntries(CAMERAS.map((c) => [c.id, { status: camStatus(s, c.id) }]))} onCam={(id) => onPick && onPick('cam:' + id)} />
         </div>
       )}
     </div>
@@ -110,9 +106,10 @@ export function CommandCentre({ onClose }) {
   const api = useRef(null);
   const open = s.alerts.filter((a) => a.status !== 'resolved');
   const alertCams = [...new Set(open.map((a) => a.cam).filter(Boolean))];
-  const wall = [...alertCams, ...CAMERAS.map((c) => c.id).filter((id) => !alertCams.includes(id))].slice(0, 6);
+  const liveIds = CAMERAS.map((c) => c.id).filter((id) => isLive(id));
+  const wall = [...new Set([...liveIds, ...alertCams, ...CAMERAS.map((c) => c.id)])].slice(0, 6);
   const counts = { online: 0, offline: 0, tampered: 0 };
-  for (const c of Object.values(s.cams)) counts[c.status] += 1;
+  for (const c of CAMERAS) counts[camStatus(s, c.id)] = (counts[camStatus(s, c.id)] || 0) + 1;
 
   const onPick = (id) => {
     setSel(id);
@@ -132,7 +129,7 @@ export function CommandCentre({ onClose }) {
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
           <Badge className="bg-white/10 text-white"><LiveDot />Live</Badge>
-          <Badge className="bg-white/10 text-white">{s.inside.toLocaleString('en-IN')} inside</Badge>
+          <Badge className="bg-white/10 text-white">{campusStats(s, now).inside} inside</Badge>
           <Badge className={open.length ? 'bg-red-600 text-white' : 'bg-white/10 text-white'}>{open.length} open alerts</Badge>
           <Badge className="bg-white/10 text-white">{counts.online}/{CAMERAS.length} cameras live</Badge>
         </div>
@@ -171,9 +168,9 @@ export function CommandCentre({ onClose }) {
           <div className="grid grid-cols-2 gap-2">
             {wall.map((id) => (
               <button key={id} type="button" onClick={() => { setCam(id); onPick('cam:' + id); }} className="overflow-hidden rounded-xl bg-black text-left ring-1 ring-white/10">
-                <CameraFeed camId={id} detections={false} className="rounded-none" />
+                <CameraFeed camId={id} className="rounded-none" />
                 <div className="flex items-center gap-1.5 px-2 py-1.5 text-[11px]">
-                  <span className={cls('h-1.5 w-1.5 rounded-full', CAM_STATUS[s.cams[id].status].dot)} />
+                  <span className={cls('h-1.5 w-1.5 rounded-full', CAM_STATUS[camStatus(s, id)].dot)} />
                   <span className="truncate">{camById(id).name}</span>
                 </div>
               </button>

@@ -4,7 +4,7 @@
 
 Kavach is a clickable prototype of a campus safety and asset protection app for KLE Technological University, Hubballi (B.V. Bhoomaraddi Campus, Vidyanagar). Students are verified at checkpoints with a rotating QR code. Between checkpoints, CCTV only watches for dangerous behaviour and never identifies anyone. At night, students can ask for an escort called **Saathi Walk**.
 
-It ships as an **Android app** (and the same build runs in a browser). There is no backend: sensors, cameras and scans are simulated with buttons and timers, and all data is mock data.
+It ships as an **Android app** (and the same build runs in a browser). There is no backend. The app **starts empty**: every alert, scan, walk, visitor, statistic and audit entry comes from what you do in the app, and it is saved on the device so it survives a restart (Student → Profile → **Clear all data** erases it). Cameras show video only when a real webcam or phone camera is connected; demo buttons simulate the parts that need hardware (gate scanner, RFID, weight sensors).
 
 ## Get the Android app
 
@@ -43,10 +43,11 @@ On a laptop it shows a phone frame with a demo guide, and on wide screens **Side
 
 ## Demo script (about 6 minutes)
 
+0. **Start screen.** Pick Female (pink) or Male (blue), then open the student app. Everything starts at zero.
 1. **Student → My ID.** Unlock with fingerprint. The QR changes every 10 seconds. *Simulate gate scan*, then *Scan IN again* (anti-passback), then *Try screenshot QR* (rejected).
 2. **Student → Saathi Walk.** *Help me get home* → Girls Hostel → *Start walk*. Each checkpoint shows how many cameras cover it. Tap *Pass next checkpoint*, then *Go missing* and let the 30 s timer run out.
 3. **Guard → Alerts.** The *Missed checkpoint* alert has the last photo and a **Live CAM** button that opens the camera. Accept, turn on lights, play the speaker warning.
-4. **Guard → Cameras.** Click **Find cameras** and connect a webcam as `CAM-B1`: walk past it, run, or stand still to trigger the AI rules. The camera wall shows every feed (faces blurred, anonymous behaviour boxes). Open one to zoom, pan (PTZ cameras), use the talk-down speaker, take a snapshot, flag an incident or request an unblur (goes to the student committee). In **Demo**, tamper a camera or take one offline.
+4. **Guard → Cameras.** Click **Find cameras** and connect a webcam, e.g. as `CAM-B1`: walk past it, run, or stand still to trigger the AI rules. Cameras without a real device say "Not connected"; connected ones show live, anonymised video. Open one to zoom, pan (PTZ cameras), use the talk-down speaker, take a snapshot, flag an incident or request an unblur (goes to the student committee). In **Demo**, tamper a camera or take one offline.
 5. **Admin → Twin.** The 3D digital twin (CesiumJS) shows buildings, camera coverage cones, live alerts as beams, guards, the Saathi Walk route and an alert heatmap. Tap a camera to see its feed. **Open command centre** (on Overview) gives a full-screen twin with a camera wall; turn the phone sideways.
 6. **Admin.** CCTV health, visitor passes, lab stock report, and the audit log, which records every camera view, snapshot and unblur request.
 
@@ -80,7 +81,9 @@ Each rule can be switched off and its sensitivity changed per camera (Guard → 
 
 ## Theme
 
-Dark tactical theme from the CAMIQ design: obsidian background, telemetry cyan for actions, coral for emergencies, emerald for safe and amber for warnings. Fonts are Space Grotesk (headings), Plus Jakarta Sans (text) and JetBrains Mono (data), bundled so they work offline.
+Dark tactical theme from the CAMIQ design: obsidian background, telemetry cyan for Guard and Admin, coral for emergencies, emerald for safe and amber for warnings. Fonts are Space Grotesk (headings), Plus Jakarta Sans (text) and JetBrains Mono (data), bundled so they work offline.
+
+**Student theme by gender:** pick the demo student on the start screen or in Profile. **Female (Priya) uses pink, male (Aarav) uses blue.** Each has their own pass, gate history, hostel route (Girls Hostel or Boys Hostel) and lab records. Saathi Walk offers a **female guard** preference (on by default for female students), and guards see a pink or blue tag on every walk alert.
 
 ## Campus layout
 

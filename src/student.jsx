@@ -1,18 +1,19 @@
 // Student app: Home, My ID, Saathi Walk, Lab (LabLedger), Profile.
 import { useState } from 'react';
 import {
-  CAMERAS, COLLEGE, CP, DISPUTE_REASONS, MIN, QR_PERIOD, ROUTES, STUDENT, camsAt, cls, cpShort, fmtDay, fmtTime, qrCode,
+  CAMERAS, COLLEGE, CP, DISPUTE_REASONS, GENDER, MIN, QR_PERIOD, ROUTES, STUDENTS, camsAt, cls, cpShort, fmtDay, fmtTime, myLog, presence, qrCode, studentOf,
 } from './data.js';
 import CampusMap from './map.jsx';
 import { CameraFeed } from './cctv.jsx';
-import { FaceEnrolPage, GateCheckSheet } from './vision/ui.jsx';
+import { FaceEnrolPage, GateCheckSheet, useVision } from './vision/ui.jsx';
+import { liveAt, liveCount, snapshotAt } from './vision/live.js';
 import { aiSupported } from './vision/engine.js';
 import {
   answerOk, cancelSos, follower, gateScan, goMissing, guardById, issueItems, lastPassed, nextStep,
-  passNext, raiseDispute, reportDarkSpot, returnItem, sos, startWalk, toast, useApp,
+  passNext, raiseDispute, reportDarkSpot, returnItem, setGender, sos, startWalk, toast, useApp,
 } from './store.js';
 import {
-  Avatar, Badge, BottomNav, Btn, Card, DemoPanel, Icon, LiveDot, NightPhoto, QR, ResultSheet, Ring,
+  Avatar, Badge, BottomNav, Btn, Card, CheckpointPhoto, DemoPanel, Icon, LiveDot, QR, ResultSheet, Ring,
   ScanOverlay, ScreenHeader, SectionTitle, Sheet, Stepper, Toggle, useFastNow,
 } from './ui.jsx';
 
@@ -68,21 +69,23 @@ export default function StudentApp() {
 // ---------------- Home ----------------
 function Home({ go }) {
   const { s, now } = useApp();
-  const inside = s.gate.dir === 'IN';
-  const lastGate = s.gate.log.find((l) => l.place === 'Main Gate');
+  const me = studentOf(s);
+  const inside = presence(s, me.id) === 'IN';
+  const log = myLog(s);
+  const lastGate = log[0];
   const w = s.walk;
   const hr = new Date(now).getHours();
   const greet = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
-  const mine = s.issued.filter((i) => i.status === 'issued');
+  const mine = s.issued.filter((i) => i.status === 'issued' && i.sid === me.id);
   return (
     <div className="pb-28">
-      <div className="rounded-b-[32px] bg-gradient-to-br from-[#0b2a35] to-[#060c11] ring-1 ring-brand/25 px-5 pb-20 pt-5 text-white">
+      <div className="rounded-b-[32px] bg-gradient-to-br from-brand/15 to-[#060c11] ring-1 ring-brand/25 px-5 pb-20 pt-5 text-white">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm text-white/65">{greet},</div>
-            <div className="font-display text-[26px] font-semibold">{STUDENT.first} 👋</div>
+            <div className="font-display text-[26px] font-semibold">{me.first} 👋</div>
           </div>
-          <button type="button" onClick={() => go('profile')} aria-label="Profile"><Avatar size={46} /></button>
+          <button type="button" onClick={() => go('profile')} aria-label="Profile"><Avatar size={46} gender={me.gender} /></button>
         </div>
         <div className="mt-3 flex items-center gap-2 text-xs text-white/80">
           <Icon name="shieldCheck" className="h-4 w-4 text-accent" /> Kavach protected · {COLLEGE}
@@ -97,7 +100,7 @@ function Home({ go }) {
             </span>
             <div className="min-w-0 flex-1">
               <div className="font-bold text-slate-900">{inside ? 'You are inside campus' : 'You are outside campus'}</div>
-              <div className="text-xs text-slate-500">Last gate scan: {lastGate.dir} · {fmtDay(lastGate.time, now)}, {fmtTime(lastGate.time)}</div>
+              <div className="text-xs text-slate-500">{lastGate ? `Last scan: ${lastGate.dir} · ${lastGate.place} · ${fmtDay(lastGate.time, now)}, ${fmtTime(lastGate.time)}` : 'No scans yet. Show your ID at the gate to check in.'}</div>
             </div>
           </div>
           <Btn className="mt-3 w-full" icon="qr" onClick={() => go('id')}>Show my ID</Btn>
@@ -140,7 +143,8 @@ function Home({ go }) {
         <div>
           <SectionTitle right={<button type="button" className="text-xs font-semibold text-brand" onClick={() => go('id')}>See all</button>}>Recent activity</SectionTitle>
           <Card className="divide-y divide-slate-100 p-0">
-            {s.gate.log.slice(0, 3).map((l) => <LogRow key={l.id} l={l} now={now} />)}
+            {log.length === 0 && <div className="p-4 text-center text-sm text-slate-500">Your gate and checkpoint scans will appear here.</div>}
+            {log.slice(0, 3).map((l) => <LogRow key={l.id} l={l} now={now} />)}
           </Card>
         </div>
       </div>
@@ -174,7 +178,9 @@ function MyId() {
   const fast = useFastNow(200);
   const slot = Math.floor(fast / (QR_PERIOD * 1000));
   const left = QR_PERIOD - ((fast / 1000) % QR_PERIOD);
-  const nextDir = s.gate.dir === 'IN' ? 'OUT' : 'IN';
+  const me = studentOf(s);
+  const myDir = presence(s, me.id);
+  const nextDir = myDir === 'IN' ? 'OUT' : 'IN';
 
   const unlock = () => {
     setLock('scanning');
@@ -187,11 +193,11 @@ function MyId() {
     if (mode === 'expired') {
       setResult({ ok: false, title: 'Rejected: code expired', note: `This code was made ${QR_PERIOD * 3 + Math.floor(((t / 1000) % QR_PERIOD))} s ago. Screenshots don't work.`, rows: [['QR code', 'Expired', false], ['Face check', 'Not started'], ['Entry logged', 'No', false]] });
     } else if (mode === 'repeat') {
-      const d = s.gate.dir;
+      const d = myDir;
       setResult({ ok: false, title: d === 'IN' ? 'Already inside, scan OUT first' : 'Already outside, scan IN first', note: 'Anti-passback: one pass cannot be used twice in a row.', rows: [['QR code', 'Valid', true], ['Face matched (1:1)', 'Yes', true], [`Entry logged: ${d}`, 'Blocked', false]] });
     } else {
       mutate((d) => gateScan(d, nextDir));
-      setResult({ ok: true, title: nextDir === 'IN' ? `Welcome in, ${STUDENT.first}!` : `Goodbye, ${STUDENT.first}!`, note: 'Main Gate · Lane 2', rows: [['Face matched (1:1)', '✓', true], ['Liveness', '✓', true], ['Entry logged', `${nextDir}, ${fmtTime(t)}`, true]] });
+      setResult({ ok: true, title: nextDir === 'IN' ? `Welcome in, ${me.first}!` : `Goodbye, ${me.first}!`, note: 'Main Gate · Lane 2', rows: [['Face matched (1:1)', '✓', true], ['Liveness', '✓', true], ['Entry logged', `${nextDir}, ${fmtTime(t)}`, true]] });
     }
     setScan(null);
   };
@@ -228,17 +234,17 @@ function MyId() {
       } />
       <div className="space-y-4 px-4 pt-4">
         <div className="fade-up overflow-hidden rounded-3xl bg-card shadow-md ring-1 ring-slate-200/70">
-          <div className="flex items-center gap-3 bg-gradient-to-r from-[#0b2a35] to-[#060c11] p-4 text-white border-b border-line">
-            <Avatar size={56} />
+          <div className="flex items-center gap-3 bg-gradient-to-r from-brand/15 to-[#060c11] p-4 text-white border-b border-line">
+            <Avatar size={56} gender={me.gender} />
             <div className="min-w-0">
-              <div className="font-display text-xl font-semibold">{STUDENT.name}</div>
-              <div className="text-sm text-white/80">{STUDENT.id}</div>
-              <div className="truncate text-xs text-white/65">{STUDENT.dept} · {STUDENT.year}</div>
+              <div className="font-display text-xl font-semibold">{me.name}</div>
+              <div className="text-sm text-white/80">{me.id}</div>
+              <div className="truncate text-xs text-white/65">{me.dept} · {me.year}</div>
             </div>
           </div>
           <div className="flex flex-col items-center px-4 pb-4 pt-5">
             <div className="rounded-2xl p-2 ring-1 ring-slate-200">
-              <QR key={slot} text={qrCode(STUDENT.id, slot)} size={196} fade />
+              <QR key={slot} text={qrCode(me.id, slot)} size={196} fade />
             </div>
             <div className="mt-4 flex items-center gap-3">
               <Ring value={left} max={QR_PERIOD} size={44} stroke={4}><span className="text-sm font-bold tabular-nums text-slate-800">{Math.ceil(left)}</span></Ring>
@@ -247,7 +253,7 @@ function MyId() {
                 <div className="text-xs text-slate-500">Screenshots stop working in 10 seconds.</div>
               </div>
             </div>
-            <div className="mt-2 font-mono text-[10px] text-slate-400">#{qrCode(STUDENT.id, slot).split('|')[3]} · {fmtTime(slot * QR_PERIOD * 1000, true)}</div>
+            <div className="mt-2 font-mono text-[10px] text-slate-400">#{qrCode(me.id, slot).split('|')[3]} · {fmtTime(slot * QR_PERIOD * 1000, true)}</div>
           </div>
         </div>
 
@@ -255,7 +261,7 @@ function MyId() {
           <Btn className="w-full" icon="scan" onClick={() => setScan({ mode: 'ok' })}>Simulate gate scan <span className="font-normal opacity-80">(next: {nextDir})</span></Btn>
           <div className="mt-2 grid grid-cols-2 gap-2">
             <Btn v="outline" size="sm" onClick={() => setScan({ mode: 'expired' })}>Try screenshot QR</Btn>
-            <Btn v="outline" size="sm" onClick={() => setScan({ mode: 'repeat' })}>Scan {s.gate.dir} again</Btn>
+            <Btn v="outline" size="sm" onClick={() => setScan({ mode: 'repeat' })}>Scan {myDir} again</Btn>
           </div>
           {aiSupported() && <Btn v="soft" size="sm" className="mt-2 w-full" icon="camera" onClick={() => setLiveGate(true)}>Live gate check with this camera (AI)</Btn>}
           <p className="mt-2 text-[11px] text-slate-500">Or hold this QR up to a webcam connected as CAM-G1 in the Guard app.</p>
@@ -264,7 +270,8 @@ function MyId() {
         <div>
           <SectionTitle>Pass history</SectionTitle>
           <Card className="divide-y divide-slate-100 p-0">
-            {s.gate.log.slice(0, 8).map((l) => <LogRow key={l.id} l={l} now={now} />)}
+            {myLog(s).length === 0 && <div className="p-4 text-center text-sm text-slate-500">No scans yet.</div>}
+            {myLog(s).slice(0, 8).map((l) => <LogRow key={l.id} l={l} now={now} />)}
           </Card>
         </div>
       </div>
@@ -295,6 +302,7 @@ function SaathiWalk() {
 }
 
 function RouteSteps({ steps, now, live }) {
+  useVision();
   let prevTime = null;
   return (
     <ol className="relative">
@@ -328,11 +336,12 @@ function RouteSteps({ steps, now, live }) {
               )}
               <div className="mt-1 flex flex-wrap gap-1">
                 {live && passed && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600"><Icon name="camera" className="h-3 w-3" />Photo {fmtTime(st.time)} · {camsAt(st.cp)[0]}</span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600"><Icon name={st.snap ? 'camera' : 'check'} className="h-3 w-3" />{st.snap ? `Photo ${fmtTime(st.time)}` : `Checked in ${fmtTime(st.time)}`}</span>
                 )}
-                {(!live || !passed) && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700"><Icon name="video" className="h-3 w-3" />{camsAt(st.cp).length} camera{camsAt(st.cp).length === 1 ? '' : 's'} watching, lit path</span>
-                )}
+                {(!live || !passed) && (() => {
+                  const n = camsAt(st.cp).length; const on = liveAt(st.cp).length;
+                  return <span className={cls('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium', on ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500')}><Icon name="video" className="h-3 w-3" />{n} camera{n === 1 ? '' : 's'} · {on} connected</span>;
+                })()}
               </div>
             </div>
           </li>
@@ -343,10 +352,13 @@ function RouteSteps({ steps, now, live }) {
 }
 
 function WalkIntro() {
-  const { mutate, now } = useApp();
+  const { s, mutate, now } = useApp();
+  const me = studentOf(s);
   const [pick, setPick] = useState(false);
-  const [dest, setDest] = useState('D');
+  const [dest, setDest] = useState(me.home);
   const [share, setShare] = useState(false);
+  const [femaleGuard, setFemaleGuard] = useState(me.gender === 'female');
+  const dests = [me.home, 'GATE'];
   const [report, setReport] = useState(false);
   const r = ROUTES[dest];
   const total = r.steps.reduce((a, b) => a + b.mins, 0);
@@ -354,7 +366,7 @@ function WalkIntro() {
     <div className="pb-28">
       <ScreenHeader title="Saathi Walk" sub="Night escort, checkpoint to checkpoint" />
       <div className="space-y-4 px-4 pt-4">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0b2a35] to-[#060c11] ring-1 ring-brand/25 p-6 text-white shadow-md">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand/15 to-[#060c11] ring-1 ring-brand/25 p-6 text-white shadow-md">
           {[[30, 20], [80, 40], [250, 26], [290, 60], [200, 14], [140, 50]].map(([x, y]) => (
             <span key={x} className="blink absolute h-1 w-1 rounded-full bg-card" style={{ left: x, top: y, animationDelay: `${x * 7}ms` }} />
           ))}
@@ -370,11 +382,11 @@ function WalkIntro() {
         </div>
         <Card className="flex items-center gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-100 text-emerald-700"><Icon name="users" /></span>
-          <div className="text-sm text-slate-600"><b className="text-slate-900">3 guards on duty</b> tonight. Sunita is near the Girls Hostel.</div>
+          <div className="text-sm text-slate-600"><b className="text-slate-900">{s.guards.length} guards on duty:</b> {s.guards.map((g) => `${g.name} (${g.post})`).join(', ')}.</div>
         </Card>
         <Card className="flex items-center gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-brand"><Icon name="video" /></span>
-          <div className="flex-1 text-sm text-slate-600"><b className="text-slate-900">{CAMERAS.length} cameras</b> cover the walk routes. They watch behaviour, not names.</div>
+          <div className="flex-1 text-sm text-slate-600"><b className="text-slate-900">{CAMERAS.length} cameras</b> on campus, <b className="text-slate-900">{liveCount()} connected</b> now. They watch behaviour, not names.</div>
         </Card>
         <Btn v="outline" className="w-full" icon="bulb" onClick={() => setReport(true)}>Report a dark spot or broken camera</Btn>
       </div>
@@ -396,10 +408,10 @@ function WalkIntro() {
       {pick && (
         <Sheet title="Where are you going?" onClose={() => setPick(false)} tall>
           <div className="space-y-2">
-            {Object.entries(ROUTES).map(([k, rt]) => (
+            {dests.map((k) => [k, ROUTES[k]]).map(([k, rt]) => (
               <button key={k} type="button" onClick={() => setDest(k)}
                 className={cls('flex w-full items-center gap-3 rounded-2xl p-3 text-left ring-2 transition', dest === k ? 'bg-brand-50 ring-brand' : 'bg-card ring-slate-200')}>
-                <span className={cls('grid h-10 w-10 place-items-center rounded-xl', dest === k ? 'bg-brand text-ink' : 'bg-slate-100 text-slate-500')}><Icon name={k === 'D' ? 'home' : 'logout'} /></span>
+                <span className={cls('grid h-10 w-10 place-items-center rounded-xl', dest === k ? 'bg-brand text-ink' : 'bg-slate-100 text-slate-500')}><Icon name={k === 'GATE' ? 'logout' : 'home'} /></span>
                 <span className="flex-1"><span className="block font-semibold text-slate-900">{rt.dest}</span><span className="block text-xs text-slate-500">{rt.sub}</span></span>
                 <span className="text-sm font-bold text-slate-700">{rt.steps.reduce((a, b) => a + b.mins, 0)} min</span>
               </button>
@@ -414,7 +426,11 @@ function WalkIntro() {
             <div className="text-sm"><div className="font-semibold text-slate-900">Share with a friend</div><div className="text-xs text-slate-500">They see your progress live</div></div>
             <Toggle on={share} onChange={setShare} label="Share with a friend" />
           </div>
-          <Btn v="accent" size="lg" className="mt-4 w-full" icon="walk" onClick={() => mutate((d) => startWalk(d, dest, share))}>Start walk · {total} min</Btn>
+          <div className="mt-2 flex items-center justify-between rounded-2xl bg-slate-50 p-3">
+            <div className="text-sm"><div className="font-semibold text-slate-900">Prefer a female guard</div><div className="text-xs text-slate-500">{femaleGuard ? 'Guard Sunita will watch your walk' : `Guard ${s.guards.find((g) => g.id === ROUTES[dest].guard).name} will watch your walk`}</div></div>
+            <Toggle on={femaleGuard} onChange={setFemaleGuard} label="Prefer a female guard" />
+          </div>
+          <Btn v="accent" size="lg" className="mt-4 w-full" icon="walk" onClick={() => mutate((d) => startWalk(d, dest, share, { femaleGuard, snap: snapshotAt('A') }))}>Start walk · {total} min</Btn>
         </Sheet>
       )}
     </div>
@@ -450,7 +466,7 @@ function WalkActive() {
     <div className="pb-32">
       <ScreenHeader title="Saathi Walk" sub={`To ${r.dest}`} right={<Badge className="bg-emerald-100 text-emerald-700"><LiveDot />LIVE</Badge>} />
       <div className="space-y-3 px-4 pt-4">
-        <div className="rounded-3xl bg-gradient-to-br from-[#0b2a35] to-[#060c11] ring-1 ring-brand/25 p-4 text-white shadow-md">
+        <div className="rounded-3xl bg-gradient-to-br from-brand/15 to-[#060c11] ring-1 ring-brand/25 p-4 text-white shadow-md">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-xs text-white/65">Walking to</div>
@@ -502,10 +518,10 @@ function WalkActive() {
         )}
 
         <Card className="flex items-center gap-3">
-          <NightPhoto cp={last.cp} time={last.time} cam={camsAt(last.cp)[0]} className="h-16 w-24" />
+          <CheckpointPhoto snap={last.snap} cam={camsAt(last.cp)[0]} time={last.time} className="h-16 w-24 shrink-0" />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900"><Icon name="camera" className="h-4 w-4 text-brand" />Photo captured at checkpoint {cpShort(last.cp)}</div>
-            <div className="text-xs text-slate-500">{fmtTime(last.time, true)} · {camsAt(last.cp)[0]} · deleted when you arrive</div>
+            <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900"><Icon name={last.snap ? 'camera' : 'check'} className="h-4 w-4 text-brand" />{last.snap ? `Photo captured at checkpoint ${cpShort(last.cp)}` : `Checked in at checkpoint ${cpShort(last.cp)}`}</div>
+            <div className="text-xs text-slate-500">{fmtTime(last.time, true)} · {last.snap ? 'anonymised, deleted when you arrive' : 'no camera connected here, so no photo'}</div>
           </div>
         </Card>
 
@@ -534,7 +550,7 @@ function WalkActive() {
         <DemoPanel title="Demo: simulate the walk">
           <div className="space-y-2">
             <Btn v="success" className="w-full" icon={isFinal ? 'qr' : 'check'} disabled={counting}
-              onClick={() => (isFinal ? setFinalScan(true) : mutate(passNext))}>
+              onClick={() => (isFinal ? setFinalScan(true) : mutate((d) => passNext(d, snapshotAt(next.cp))))}>
               {isFinal ? `Scan ${r.finalScan} at ${cpShort(next.cp)}` : `Pass next checkpoint (${cpShort(next.cp)})`}
             </Btn>
             <div className="grid grid-cols-2 gap-2">
@@ -548,7 +564,7 @@ function WalkActive() {
       {finalScan && (
         <ScanOverlay subtitle={CP[next.cp].name} title={`Scanning ${r.finalScan}`} mode="face" duration={2200}
           steps={[`Reading ${r.finalScan}`, 'Face match 1:1', 'Closing your walk']}
-          onDone={() => { setFinalScan(false); mutate(passNext); }} />
+          onDone={() => { setFinalScan(false); mutate((d) => passNext(d, snapshotAt(next.cp))); }} />
       )}
     </div>
   );
@@ -565,7 +581,7 @@ function AreYouOk() {
       <Ring value={left} max={30} size={120} stroke={8} color="#F43F5E" track="rgba(255,255,255,.12)">
         <div><div className="text-4xl font-black tabular-nums">{left}</div><div className="text-[10px] uppercase tracking-wider text-white/65">seconds</div></div>
       </Ring>
-      <h2 className="mt-6 font-display text-[40px] font-semibold">Are you <i>OK?</i></h2>
+      <h2 className="mt-6 font-display text-[40px] font-semibold">Are you OK?</h2>
       <p className="mt-2 text-white/80">You have not reached {CP[next.cp].name} ({cpShort(next.cp)}) on time.</p>
       <div className="mt-8 grid w-full max-w-[300px] gap-3">
         <Btn v="success" size="lg" className="h-16 text-lg" icon="check" onClick={() => mutate(answerOk)}>I'm OK</Btn>
@@ -588,21 +604,21 @@ function WalkArrived() {
         <div className="pop grid h-24 w-24 place-items-center rounded-full bg-emerald-100 text-emerald-600 ring-8 ring-emerald-50">
           <Icon name="home" className="h-11 w-11" />
         </div>
-        <h2 className="mt-5 font-display text-[26px] font-semibold text-slate-900">You reached <i>safely.</i></h2>
-        <p className="mt-1 flex items-center gap-1.5 font-semibold text-emerald-700"><Icon name="trash" className="h-4 w-4" />All walk photos deleted.</p>
+        <h2 className="mt-5 font-display text-[26px] font-semibold text-slate-900">You reached safely.</h2>
+        <p className="mt-1 flex items-center gap-1.5 font-semibold text-emerald-700"><Icon name="trash" className="h-4 w-4" />{w.photosDeleted ? `All ${w.photosDeleted} walk photo${w.photosDeleted === 1 ? '' : 's'} deleted.` : 'No photos were kept.'}</p>
         <p className="mt-1 text-sm text-slate-500">{ROUTES[w.dest].dest} · {fmtTime(w.arrivedAt)}</p>
       </div>
       <div className="mt-6 space-y-3 px-4">
         <div className="grid grid-cols-3 gap-2 text-center">
-          {[[`${mins} min`, 'Walk time'], [w.steps.length, 'Checkpoints'], ['0', 'Photos kept']].map(([v, k]) => (
+          {[[`${mins} min`, 'Walk time'], [w.steps.length, 'Checkpoints'], [w.photosDeleted || 0, 'Photos deleted']].map(([v, k]) => (
             <Card key={k} className="px-2 py-3"><div className="text-xl font-extrabold text-slate-900">{v}</div><div className="text-xs text-slate-500">{k}</div></Card>
           ))}
         </div>
         <Card>
-          <div className="grid grid-cols-4 gap-2">
+          <div className={cls('grid gap-2', w.steps.length === 4 ? 'grid-cols-4' : 'grid-cols-3')}>
             {w.steps.map((st) => (
               <div key={st.cp} className="text-center">
-                <NightPhoto cp={st.cp} time={st.time || w.arrivedAt} cam={camsAt(st.cp)[0]} deleted className="aspect-[4/3] w-full" />
+                <CheckpointPhoto cam={camsAt(st.cp)[0]} time={st.time || w.arrivedAt} deleted={st.hadPhoto} className="aspect-[4/3] w-full" />
                 <div className="mt-1 text-[11px] font-semibold text-slate-600">{cpShort(st.cp)}</div>
               </div>
             ))}
@@ -621,8 +637,10 @@ function Lab() {
   const [picks, setPicks] = useState({});
   const [ret, setRet] = useState(null); // { issue, phase: 'scan' | 'result', missing }
   const [dispute, setDispute] = useState(null);
-  const mine = s.issued.filter((i) => i.status === 'issued');
-  const past = s.issued.filter((i) => i.status !== 'issued').slice(0, 4);
+  const me = studentOf(s);
+  const mine = s.issued.filter((i) => i.status === 'issued' && i.sid === me.id);
+  const past = s.issued.filter((i) => i.status !== 'issued' && i.sid === me.id).slice(0, 4);
+  const sessions = s.issued.filter((i) => i.rfid && i.sid === me.id).slice(0, 4);
   const count = Object.values(picks).reduce((a, b) => a + b, 0);
   const grams = Object.entries(picks).reduce((a, [id, q]) => a + q * (s.inventory.find((x) => x.id === id).gram || 0), 0);
   const disputed = (label) => s.disputes.some((d) => d.label === label);
@@ -641,7 +659,7 @@ function Lab() {
       <ScreenHeader title="LabLedger" sub="Electronics Lab · borrow and return" />
       <div className="space-y-4 px-4 pt-4">
         <button type="button" onClick={() => setStage('scanShelf')}
-          className="flex w-full items-center gap-4 rounded-3xl bg-gradient-to-br from-[#0b2a35] to-[#060c11] ring-1 ring-brand/25 p-5 text-left text-white shadow-md active:scale-[.99]">
+          className="flex w-full items-center gap-4 rounded-3xl bg-gradient-to-br from-brand/15 to-[#060c11] ring-1 ring-brand/25 p-5 text-left text-white shadow-md active:scale-[.99]">
           <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/15"><Icon name="scan" className="h-7 w-7" /></span>
           <span className="flex-1">
             <span className="block text-lg font-bold">Scan QR at shelf</span>
@@ -673,16 +691,18 @@ function Lab() {
         <div>
           <SectionTitle>Instrument usage</SectionTitle>
           <div className="space-y-2">
-            {s.sessions.map((se) => {
-              const label = `${se.label}, ${se.bench}, ${se.day} ${se.slot}`;
+            {sessions.length === 0 && <Card className="text-center text-sm text-slate-500">Instruments you take (RFID tagged) appear here with their session times.</Card>}
+            {sessions.map((se) => {
+              const label = `${se.name}, ${se.bench}, ${fmtDay(se.time, now)} ${fmtTime(se.time)}`;
+              const inUse = se.status === 'issued';
               return (
                 <Card key={se.id} className="p-3">
                   <div className="flex items-start gap-3">
-                    <span className="grid h-11 w-11 place-items-center rounded-xl bg-emerald-100 text-emerald-700"><Icon name="activity" /></span>
+                    <span className={cls('grid h-11 w-11 place-items-center rounded-xl', inUse ? 'bg-brand-100 text-brand' : 'bg-emerald-100 text-emerald-700')}><Icon name="activity" /></span>
                     <div className="min-w-0 flex-1">
-                      <div className="font-semibold text-slate-900">{se.label}, {se.bench}</div>
-                      <div className="text-xs text-slate-500">Your session {se.day === 'Today' ? '' : se.day + ' '}{se.slot}: <span className="font-semibold text-emerald-700">normal ✓</span></div>
-                      <div className="mt-0.5 text-[11px] text-slate-400">Power and usage pattern looked normal. No damage flagged.</div>
+                      <div className="font-semibold text-slate-900">{se.name}, {se.bench}</div>
+                      <div className="text-xs text-slate-500">From {fmtTime(se.time)}{inUse ? ' · in use now' : ` to ${fmtTime(se.returnedAt)} · returned`}</div>
+                      <div className="mt-0.5 text-[11px] text-slate-400">{inUse ? 'Return it on the bench tray when done.' : 'No issues reported.'}</div>
                     </div>
                     <Btn size="sm" v="outline" icon="flag" onClick={() => setDispute(label)}>{disputed(label) ? 'Sent' : 'Dispute'}</Btn>
                   </div>
@@ -742,7 +762,7 @@ function Lab() {
       )}
       {stage === 'weighing' && (
         <ScanOverlay subtitle="LabLedger" title="Counting your items" mode="weight" duration={2000}
-          steps={['Weight sensor counting', 'Reading RFID tags', `Issuing to ${STUDENT.id}`]}
+          steps={['Weight sensor counting', 'Reading RFID tags', `Issuing to ${me.id}`]}
           onDone={() => { mutate((d) => issueItems(d, picks)); setStage(null); }} />
       )}
 
@@ -793,27 +813,49 @@ function DisputeSheet({ label, onClose }) {
 }
 
 // ---------------- Profile & privacy ----------------
+export function GenderSwitch({ className }) {
+  const { s, mutate } = useApp();
+  return (
+    <div className={cls('flex rounded-full bg-white/5 p-1 ring-1 ring-line', className)} role="radiogroup" aria-label="Student">
+      {['female', 'male'].map((g) => (
+        <button key={g} type="button" role="radio" aria-checked={s.gender === g} onClick={() => mutate((d) => setGender(d, g))}
+          className={cls('flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition',
+            s.gender === g ? (g === 'female' ? 'bg-[#f472b6] text-ink' : 'bg-[#3b82f6] text-ink') : 'text-slate-500 hover:text-slate-900')}>
+          <span className={cls('h-2 w-2 rounded-full', g === 'female' ? 'bg-[#f472b6]' : 'bg-[#3b82f6]', s.gender === g && 'bg-ink')} />{GENDER[g].label} · {STUDENTS[g].first}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Profile() {
   const { s, reset } = useApp();
+  const me = studentOf(s);
   const [page, setPage] = useState('main');
   if (page === 'data') return <MyData onBack={() => setPage('main')} />;
   if (page === 'face') return <FaceEnrolPage onBack={() => setPage('main')} />;
   const rows = [
-    ['idcard', 'Student ID', STUDENT.id],
-    ['flask', 'Department', STUDENT.dept],
-    ['user', 'Year', STUDENT.year],
-    ['home', 'Hostel', STUDENT.hostel],
-    ['phone', 'Phone', STUDENT.phone],
+    ['idcard', 'Student ID', me.id],
+    ['flask', 'Department', me.dept],
+    ['user', 'Year', me.year],
+    ['home', 'Hostel', me.hostel],
+    ['phone', 'Phone', me.phone],
   ];
+  const myDisputes = s.disputes.filter((x) => x.sid === me.id);
   return (
     <div className="pb-28">
-      <div className="rounded-b-[32px] bg-gradient-to-br from-[#0b2a35] to-[#060c11] ring-1 ring-brand/25 px-5 pb-6 pt-6 text-center text-white">
-        <Avatar size={84} className="mx-auto ring-4" />
-        <h2 className="mt-3 font-display text-2xl font-semibold">{STUDENT.name}</h2>
-        <p className="text-sm text-white/80">{STUDENT.dept} · {STUDENT.year}</p>
+      <div className="rounded-b-[32px] bg-gradient-to-br from-brand/15 to-[#060c11] ring-1 ring-brand/25 px-5 pb-6 pt-6 text-center text-white">
+        <Avatar size={84} className="mx-auto ring-4" gender={me.gender} />
+        <h2 className="mt-3 font-display text-2xl font-semibold">{me.name}</h2>
+        <p className="text-sm text-white/80">{me.dept} · {me.year}</p>
         <Badge className="mt-2 bg-white/15 text-white"><Icon name="shieldCheck" className="h-3.5 w-3.5 text-accent" />Verified student</Badge>
       </div>
       <div className="space-y-4 px-4 pt-4">
+        <div>
+          <SectionTitle>Demo student</SectionTitle>
+          <GenderSwitch />
+          <p className="mt-1.5 px-1 text-[11px] text-slate-500">Pink for female, blue for male. Each student has their own pass, hostel route and lab records.</p>
+        </div>
         <Card className="divide-y divide-slate-100 p-0">
           {rows.map(([ic, k, v]) => (
             <div key={k} className="flex items-center gap-3 px-4 py-3">
@@ -827,8 +869,8 @@ function Profile() {
           {[
             { ic: 'eye', t: 'My data and privacy', d: 'What is stored and for how long', go: () => setPage('data') },
             { ic: 'fingerprint', t: 'Face check at gates', d: 'Enrol on this phone for 1:1 checks', go: () => setPage('face') },
-            { ic: 'flag', t: 'My disputes', d: s.disputes.length ? `${s.disputes.length} open` : 'None open', go: () => setPage('data') },
-            { ic: 'refresh', t: 'Reset demo', d: 'Restore all mock data', go: reset },
+            { ic: 'flag', t: 'My disputes', d: myDisputes.length ? `${myDisputes.length} open` : 'None open', go: () => setPage('data') },
+            { ic: 'refresh', t: 'Clear all data', d: 'Erase everything recorded on this device', go: reset },
           ].map((x) => (
             <button key={x.t} type="button" onClick={x.go} className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-slate-50">
               <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-50 text-brand"><Icon name={x.ic} className="h-4 w-4" /></span>
@@ -846,13 +888,14 @@ function MyData({ onBack }) {
   const { s, mutate } = useApp();
   const w = s.walk;
   const walkPhotos = w && w.phase === 'active' ? w.steps.filter((x) => x.status === 'passed').length : 0;
-  const myLookups = s.audit.filter((a) => a.action.includes(STUDENT.id) || a.who.includes(STUDENT.id));
+  const me = studentOf(s);
+  const myLookups = s.audit.filter((a) => a.action.includes(me.id) || a.who.includes(me.id));
   const data = [
     ['Name, ID, department, photo', 'To check it is you at checkpoints', 'While enrolled'],
     ['Face template (encrypted)', 'Only a 1:1 match with your own ID', 'Deleted when you graduate'],
-    ['Entry and exit log', `Headcount in emergencies · ${s.gate.log.length} records now`, '30 days'],
+    ['Entry and exit log', `Headcount in emergencies · ${myLog(s).length} records now`, '30 days'],
     ['Saathi Walk photos', `Only during a walk · ${walkPhotos} stored now`, 'Deleted on arrival (max 12 h)'],
-    ['Lab issue records', `${s.issued.length} records`, 'Until returned + 1 semester'],
+    ['Lab issue records', `${s.issued.filter((i) => i.sid === me.id).length} records`, 'Until returned + 1 semester'],
     ['Camera video between checkpoints', 'Anonymous, faces blurred, no names', '7 days'],
   ];
   const promise = [
@@ -867,7 +910,7 @@ function MyData({ onBack }) {
     <div className="pb-28">
       <ScreenHeader title="My data" sub="Exactly what Kavach keeps about you" onBack={onBack} />
       <div className="space-y-4 px-4 pt-4">
-        <div className="rounded-3xl bg-gradient-to-br from-[#0b2a35] to-[#060c11] ring-1 ring-brand/25 p-5 text-white shadow-md">
+        <div className="rounded-3xl bg-gradient-to-br from-brand/15 to-[#060c11] ring-1 ring-brand/25 p-5 text-white shadow-md">
           <div className="flex items-center gap-2 text-accent"><Icon name="shieldCheck" /><span className="text-sm font-bold uppercase tracking-wider">Our privacy promise</span></div>
           <ul className="mt-3 space-y-2.5">
             {promise.map(([b, t]) => (

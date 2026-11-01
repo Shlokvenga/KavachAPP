@@ -62,6 +62,7 @@ export const CHECKPOINTS = {
   B: { name: 'Workshop Path', tag: 'B', x: 10, y: 12 },
   C: { name: 'Canteen Junction', tag: 'C', x: 122, y: -30 },
   D: { name: 'Girls Hostel', tag: 'D', x: 152, y: 114 },
+  E: { name: 'Boys Hostel', tag: 'E', x: -20, y: 150 },
   LAB: { name: 'ECE Electronics Lab', tag: 'L', x: -150, y: 34 },
   ADMIN: { name: 'Main Building', tag: 'M', x: -78, y: -138 },
   WALL: { name: 'East Boundary Wall', tag: 'W', x: 252, y: 40 },
@@ -70,7 +71,7 @@ export const CHECKPOINTS = {
 export const GUARD_POSTS = {
   ramesh: { x: 22, y: -196 },
   sunita: { x: 176, y: 100 },
-  imran: { x: -104, y: -64 },
+  imran: { x: -60, y: 120 },
 };
 
 // CCTV cameras. heading: degrees clockwise from north. range in metres.
@@ -87,7 +88,7 @@ export const CAMERAS = [
   { id: 'CAM-D2', name: 'Hostel approach', cp: 'D', x: 140, y: 60, heading: 20, fov: 70, range: 60, type: 'Bullet, IR night', scene: 'path', analytics: ['Following', 'Visitor zone'] },
   { id: 'CAM-D1', name: 'Girls Hostel gate', cp: 'D', x: 160, y: 124, heading: 210, fov: 80, range: 40, type: 'Gate 1:1 verify', scene: 'gate', analytics: ['Tailgating', 'Visitor zone'] },
   { id: 'CAM-L1', name: 'ECE lab door (RFID)', cp: 'LAB', x: -156, y: 44, heading: 150, fov: 70, range: 25, type: 'Dome + RFID', scene: 'building', analytics: ['Asset exit'] },
-  { id: 'CAM-H1', name: 'Boys Hostel path', cp: 'B', x: -20, y: 148, heading: 270, fov: 80, range: 50, type: 'Bullet', scene: 'path', analytics: ['Loitering'] },
+  { id: 'CAM-H1', name: 'Boys Hostel path', cp: 'E', x: 0, y: 140, heading: 290, fov: 80, range: 50, type: 'Bullet, IR night', scene: 'path', analytics: ['Following', 'Loitering'] },
   { id: 'CAM-W1', name: 'East wall north (thermal)', cp: 'WALL', x: 252, y: 60, heading: 180, fov: 40, range: 110, type: 'Thermal', scene: 'wall', analytics: ['Intrusion'] },
   { id: 'CAM-W2', name: 'East wall south (thermal)', cp: 'WALL', x: 252, y: -60, heading: 0, fov: 40, range: 110, type: 'Thermal', scene: 'wall', analytics: ['Intrusion'] },
 ];

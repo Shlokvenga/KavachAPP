@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 // Dark "tactical HUD" theme (from the CAMIQ design): obsidian background, telemetry
-// cyan for primary actions, coral for emergencies, emerald for safe, amber for warnings.
+// cyan for primary actions (pink / blue in the student app by gender), coral for emergencies, emerald for safe, amber for warnings.
 // The neutral scale is inverted (slate-50 is darkest, slate-900 is lightest) and the
 // light status tints (red-50 … red-200) become translucent glows, so the same class
 // names read correctly on a dark UI.
@@ -29,8 +29,9 @@ module.exports = {
         card: '#0a1218',
         raise: '#0e1a21',
         line: 'rgba(112, 161, 177, 0.24)',
-        brand: { DEFAULT: '#00e5ff', light: '#67f0ff', dark: '#00b3c7', 50: 'rgba(0, 229, 255, 0.07)', 100: 'rgba(0, 229, 255, 0.14)' },
-        accent: { DEFAULT: '#00e5ff', light: 'rgba(0, 229, 255, 0.2)', dark: '#67f0ff' },
+        // brand follows the active theme: cyan for Guard/Admin, pink (female) or blue (male) for the student app
+        brand: { DEFAULT: 'rgb(var(--brand) / <alpha-value>)', light: 'rgb(var(--brand-light) / <alpha-value>)', dark: 'rgb(var(--brand-dark) / <alpha-value>)', 50: 'rgb(var(--brand) / 0.07)', 100: 'rgb(var(--brand) / 0.14)' },
+        accent: { DEFAULT: 'rgb(var(--brand) / <alpha-value>)', light: 'rgb(var(--brand) / 0.2)', dark: 'rgb(var(--brand-light) / <alpha-value>)' },
         coral: '#F43F5E',
         slate: {
           50: '#070d12', 100: '#0e1920', 200: '#17262f', 300: '#22353f', 400: '#4b6370', 500: '#7b929c',

@@ -7,10 +7,10 @@ import {
 } from './store.js';
 import CampusMap from './map.jsx';
 import { CAMERAS } from './campus.js';
-import { CamTile, CameraViewer } from './cctv.jsx';
+import { CamTile, CameraViewer, camStatus } from './cctv.jsx';
 import { AiExplain, CamConnect } from './vision/ui.jsx';
 import { isLive } from './vision/live.js';
-import { Badge, BottomNav, Btn, Card, ClipPlayer, DemoPanel, Icon, LiveDot, NightPhoto, SectionTitle, Toggle } from './ui.jsx';
+import { Avatar, Badge, BottomNav, Btn, Card, CheckpointPhoto, DemoPanel, Icon, LiveDot, SectionTitle, Toggle } from './ui.jsx';
 
 const byPriority = (a, b) => PRI[ALERT_TYPES[a.type].pri].rank - PRI[ALERT_TYPES[b.type].pri].rank || b.time - a.time;
 
@@ -21,7 +21,7 @@ export default function GuardApp() {
   const [cam, setCam] = useState(null);
   const g = guardById(s, me);
   const open = s.alerts.filter((a) => a.status !== 'resolved');
-  const camIssues = Object.values(s.cams).filter((c) => c.status !== 'online').length;
+  const camIssues = CAMERAS.filter((c) => ['tampered', 'offline'].includes(camStatus(s, c.id))).length;
 
   return (
     <>
@@ -135,25 +135,25 @@ export function AlertCard({ a, me, compact, openCam }) {
         <p className="mt-3 text-sm text-slate-700">{a.detail}</p>
         <AiExplain a={a} />
 
-        {!compact && !a.ai && (
-          <div className={cls('mt-3 grid gap-2', a.photo ? 'grid-cols-2' : 'grid-cols-1')}>
-            {a.photo && (
-              <button type="button" className="text-left" onClick={() => logView('Viewed Saathi Walk last-seen photo')}>
-                <NightPhoto cp={a.photo.cp} time={a.photo.time} cam={a.photo.cam} className="aspect-video w-full" />
-                <div className="mt-1 text-[11px] font-medium text-slate-500">Last seen · {cpShort(a.photo.cp)}, {fmtTime(a.photo.time)}</div>
-              </button>
-            )}
-            <div>
-              <ClipPlayer cp={a.cp} cam={a.cam} onView={() => logView(`Viewed 10 s clip ${a.cam || ''}`)} label={a.photo ? '10 s clip' : '10 s clip · faces blurred'} />
-              {a.photo && <div className="mt-1 text-[11px] font-medium text-slate-500">Faces blurred</div>}
-            </div>
+        {a.student && (
+          <div className={cls('mt-3 flex items-center gap-2 rounded-xl p-2 text-xs', a.student.gender === 'male' ? 'bg-[#3b82f6]/10 ring-1 ring-[#3b82f6]/40' : 'bg-[#f472b6]/10 ring-1 ring-[#f472b6]/40')}>
+            <span className={cls('h-2.5 w-2.5 rounded-full', a.student.gender === 'male' ? 'bg-[#3b82f6]' : 'bg-[#f472b6]')} />
+            <span className="font-semibold text-slate-900">{a.student.name}</span>
+            <span className="text-slate-500">{a.student.gender === 'male' ? 'Male student' : 'Female student'}{a.student.gender === 'female' && s.walk && s.walk.femaleGuard && s.walk.sid === a.student.id ? ' · female guard requested' : ''}</span>
           </div>
+        )}
+
+        {!compact && !a.ai && a.photo && (
+          <button type="button" className="mt-3 block w-full text-left" onClick={() => a.photo.snap && logView('Viewed Saathi Walk last-seen photo')}>
+            <CheckpointPhoto snap={a.photo.snap} cam={a.photo.cam} time={a.photo.time} className="aspect-video w-full" />
+            <div className="mt-1 text-[11px] font-medium text-slate-500">Last seen · {cpShort(a.photo.cp)}, {fmtTime(a.photo.time)}{a.photo.snap ? ' · anonymised' : ''}</div>
+          </button>
         )}
 
         <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
           {a.cam && openCam && (
             <button type="button" onClick={() => openCam(a.cam)} className="inline-flex items-center gap-1 rounded-full bg-ink px-2 py-0.5 font-semibold text-white">
-              <span className={cls('h-1.5 w-1.5 rounded-full', s.cams[a.cam].status === 'online' ? 'bg-red-500 blink' : 'bg-slate-400')} />Live {a.cam}
+              <span className={cls('h-1.5 w-1.5 rounded-full', camStatus(s, a.cam) === 'online' ? 'bg-red-500 blink' : 'bg-slate-400')} />{camStatus(s, a.cam) === 'online' ? 'Live' : 'Camera'} {a.cam}
             </button>
           )}
           <Badge className="bg-slate-100 text-slate-600"><Icon name="user" className="h-3 w-3" />Nearest: {assigned.name} ({distM(assigned, cp)} m)</Badge>
@@ -212,7 +212,7 @@ function MapTab({ me, openCam }) {
   return (
     <div className="space-y-3 p-4 pb-8">
       <Card className="p-2">
-        <CampusMap alerts={s.alerts} guards={s.guards} walk={s.walk} selected={sel} onSelect={setSel} showCams={showCams} cams={s.cams} onCam={openCam} />
+        <CampusMap alerts={s.alerts} guards={s.guards} walk={s.walk} selected={sel} onSelect={setSel} showCams={showCams} cams={Object.fromEntries(CAMERAS.map((c) => [c.id, { status: camStatus(s, c.id) }]))} onCam={openCam} />
         <div className="flex flex-wrap gap-x-3 gap-y-1 px-2 pb-1 pt-2 text-[11px] text-slate-600">
           <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-red-600" />Alert</span>
           <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-amber-500" />Warning</span>
@@ -251,18 +251,18 @@ function MapTab({ me, openCam }) {
 function CamerasTab({ openCam }) {
   const { s } = useApp();
   const [zone, setZone] = useState('all');
-  const counts = { online: 0, offline: 0, tampered: 0 };
-  for (const c of Object.values(s.cams)) counts[c.status] += 1;
+  const counts = { online: 0, none: 0, offline: 0, tampered: 0 };
+  for (const c of CAMERAS) counts[camStatus(s, c.id)] += 1;
   const alertCams = new Set(s.alerts.filter((a) => a.status !== 'resolved' && a.cam).map((a) => a.cam));
-  const zones = [['all', 'All'], ['alert', 'With alerts'], ['GATE', 'Gate'], ['B', 'Paths'], ['D', 'Hostel'], ['WALL', 'Wall']];
-  const list = CAMERAS.filter((c) => zone === 'all' || (zone === 'alert' ? alertCams.has(c.id) : c.cp === zone))
-    .sort((a, b) => Number(isLive(b.id)) - Number(isLive(a.id)) || Number(alertCams.has(b.id)) - Number(alertCams.has(a.id)) || (s.cams[a.id].status === 'online') - (s.cams[b.id].status === 'online'));
+  const zones = [['all', 'All'], ['live', 'Live'], ['alert', 'With alerts'], ['GATE', 'Gate'], ['B', 'Paths'], ['D', 'Hostels'], ['WALL', 'Wall']];
+  const list = CAMERAS.filter((c) => zone === 'all' || (zone === 'live' ? isLive(c.id) : zone === 'alert' ? alertCams.has(c.id) : zone === 'D' ? ['D', 'E'].includes(c.cp) : c.cp === zone))
+    .sort((a, b) => Number(isLive(b.id)) - Number(isLive(a.id)) || Number(alertCams.has(b.id)) - Number(alertCams.has(a.id)));
   return (
     <div className="space-y-3 p-4 pb-8">
       <CamConnect />
       <div className="grid grid-cols-3 gap-2">
-        {[['online', 'Live', 'text-emerald-600'], ['offline', 'Offline', 'text-slate-500'], ['tampered', 'Tampered', 'text-amber-600']].map(([k, l, c]) => (
-          <Card key={k} className="px-3 py-2.5 text-center"><div className={cls('text-2xl font-extrabold', c)}>{counts[k]}</div><div className="text-[11px] font-medium text-slate-500">{l}</div></Card>
+        {[['online', 'Live', 'text-emerald-600'], ['none', 'Not connected', 'text-slate-500'], ['tampered', 'Faults', 'text-amber-600']].map(([k, l, c]) => (
+          <Card key={k} className="px-3 py-2.5 text-center"><div className={cls('text-2xl font-extrabold', c)}>{k === 'tampered' ? counts.tampered + counts.offline : counts[k]}</div><div className="text-[11px] font-medium text-slate-500">{l}</div></Card>
         ))}
       </div>
       <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
@@ -292,23 +292,18 @@ function WalksTab() {
         <p className="text-sm text-slate-700">Names show here only because the student <b>opted in</b> to a Saathi Walk. Everyone else stays anonymous.</p>
       </Card>
       <Card className="p-2"><CampusMap alerts={[]} guards={s.guards} walk={w} /></Card>
-      {w && <PriyaWalk w={w} now={now} />}
-      {s.otherWalks.map((o) => (
-        <Card key={o.id} className="flex items-center gap-3 p-3">
-          <span className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 font-bold text-slate-600">{o.name[0]}</span>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold text-slate-900">{o.name} → {o.dest}</div>
-            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${o.progress * 100}%` }} /></div>
-            <div className="mt-1 text-xs text-slate-500">Last: {CP[o.at].name} · started {ago(o.started, now)}</div>
-          </div>
-          <Badge className="bg-emerald-100 text-emerald-700">On time</Badge>
+      {w ? <WalkRow w={w} now={now} /> : (
+        <Card className="py-8 text-center">
+          <Icon name="walk" className="mx-auto h-8 w-8 text-slate-400" />
+          <div className="mt-2 font-semibold text-slate-900">No active walks</div>
+          <div className="text-sm text-slate-500">When a student starts a Saathi Walk it appears here live.</div>
         </Card>
-      ))}
+      )}
     </div>
   );
 }
 
-function PriyaWalk({ w, now }) {
+function WalkRow({ w, now }) {
   const { s } = useApp();
   const passed = w.steps.filter((x) => x.status === 'passed').length;
   const last = lastPassed(w);
@@ -320,11 +315,11 @@ function PriyaWalk({ w, now }) {
         : w.missing ? ['Checking in…', 'bg-amber-100 text-amber-800']
           : openA.length ? ['Follower alert', 'bg-violet-100 text-violet-700'] : ['On time', 'bg-emerald-100 text-emerald-700'];
   return (
-    <Card className="p-3 ring-2 ring-accent/60">
-      <div className="flex items-center gap-3">
-        <span className="grid h-10 w-10 place-items-center rounded-full bg-accent font-bold text-ink">P</span>
+    <Card className={cls('p-3 ring-2', w.gender === 'male' ? 'ring-[#3b82f6]/60' : 'ring-[#f472b6]/60')}>
+      <div className={cls('flex items-center gap-3', w.gender === 'male' ? 'theme-male' : 'theme-female')}>
+        <Avatar size={40} gender={w.gender} />
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold text-slate-900">Priya S. → {ROUTES[w.dest].dest}</div>
+          <div className="text-sm font-semibold text-slate-900">{w.name} → {ROUTES[w.dest].dest}</div>
           <div className="text-xs text-slate-500">{w.phase === 'arrived' ? `Arrived ${fmtTime(w.arrivedAt)} · photos deleted` : `Last: ${cpShort(last.cp)} ${fmtTime(last.time)} · next: ${next ? cpShort(next.cp) : '-'}`}</div>
         </div>
         <Badge className={state[1]}>{state[0]}</Badge>
@@ -337,7 +332,7 @@ function PriyaWalk({ w, now }) {
           </div>
         ))}
       </div>
-      <div className="mt-1 text-right text-[11px] text-slate-400">{passed}/{w.steps.length} · started {ago(w.startedAt, now)}{w.sharing ? ' · shared with a friend' : ''}</div>
+      <div className="mt-1 text-right text-[11px] text-slate-400">{passed}/{w.steps.length} · started {ago(w.startedAt, now)} · guard {guardById(s, w.guard).name}{w.femaleGuard ? ' (female guard requested)' : ''}{w.sharing ? ' · shared with a friend' : ''}</div>
     </Card>
   );
 }

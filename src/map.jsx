@@ -5,7 +5,7 @@ import { BOUNDARY, BUILDINGS, CAMERAS, GROUND, LAWNS, ROADS, SCALE, toMap } from
 import { ALERT_TYPES, CP, cls } from './data.js';
 
 const KIND = { academic: '#16303b', admin: '#1d3b47', hostel: '#1a2f3d', amenity: '#172b33', research: '#12352c', lab: '#183641' };
-const CAM_COL = { online: '#00e5ff', offline: '#64748b', tampered: '#f59e0b' };
+const CAM_COL = { online: '#00e5ff', none: '#4b6370', offline: '#64748b', tampered: '#f59e0b' };
 const font = { fontFamily: "'Space Grotesk Variable', 'Space Grotesk', system-ui, sans-serif" };
 
 function rect(b) {
@@ -63,9 +63,9 @@ export default function CampusMap({
       })}
 
       {showCams && CAMERAS.map((c) => {
-        const st = (cams && cams[c.id] && cams[c.id].status) || 'online';
+        const st = (cams && cams[c.id] && cams[c.id].status) || 'none';
         const hi = (highlightCams && highlightCams.includes(c.id)) || selectedCam === c.id;
-        return <path key={'fov' + c.id} d={wedge(c)} fill={CAM_COL[st]} opacity={hi ? 0.32 : 0.1} />;
+        return <path key={'fov' + c.id} d={wedge(c)} fill={CAM_COL[st]} opacity={hi ? 0.32 : st === 'none' ? 0.05 : 0.12} />;
       })}
 
       {route && <polyline points={route.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#10B981" strokeWidth="3" strokeDasharray="6 4" strokeLinecap="round" className="route-dash" />}
@@ -103,13 +103,13 @@ export default function CampusMap({
       })}
 
       {showCams && CAMERAS.map((c) => {
-        const st = (cams && cams[c.id] && cams[c.id].status) || 'online';
+        const st = (cams && cams[c.id] && cams[c.id].status) || 'none';
         const p = toMap(c.x, c.y);
         const sel = selectedCam === c.id;
         return (
           <g key={'cam' + c.id} onClick={onCam ? () => onCam(c.id) : undefined} className={cls(onCam && 'cursor-pointer')}>
             <circle cx={p.x} cy={p.y} r={sel ? 6 : 4.2} fill={CAM_COL[st]} stroke="#05090d" strokeWidth="1.4" />
-            {st !== 'online' && <circle cx={p.x} cy={p.y} r="5" fill={CAM_COL[st]} className="pulse-ring" />}
+            {(st === 'tampered' || st === 'offline') && <circle cx={p.x} cy={p.y} r="5" fill={CAM_COL[st]} className="pulse-ring" />}
             <circle cx={p.x} cy={p.y} r="11" fill="transparent" />
           </g>
         );
@@ -124,7 +124,7 @@ export default function CampusMap({
         <g style={{ transform: `translate(${walkPos.x}px, ${walkPos.y}px)`, transition: 'transform 1.2s ease-in-out' }}>
           <circle r="7" fill="#10B981" opacity=".5" className="pulse-ring" />
           <circle r="6" fill="#10B981" stroke="#05090d" strokeWidth="2" />
-          <text y="-10" textAnchor="middle" fontSize="7" fontWeight="700" fill="#6ee7b7">Priya</text>
+          <text y="-10" textAnchor="middle" fontSize="7" fontWeight="700" fill="#6ee7b7">{walk.first || walk.name}</text>
         </g>
       )}
 

@@ -1,10 +1,11 @@
 // App shell: start screen, role switcher, phone frame(s), shared state and timers.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { STUDENT, camById, cls, makeInitial, pad, verifyQr } from './data.js';
+import { GENDER, STATE_VERSION, STUDENTS, camById, cls, makeInitial, pad, verifyQr } from './data.js';
 import { AppCtx, aiEvent, gateQr, tick, toast, useApp } from './store.js';
 import { configureLive } from './vision/live.js';
-import { loadTemplate, verify } from './vision/face.js';
+import { deleteTemplate, loadTemplate, verify } from './vision/face.js';
+import { GenderSwitch } from './student.jsx';
 import { Avatar, Btn, Icon, Logo, Toasts } from './ui.jsx';
 import { CAMPUS_SHORT } from './campus.js';
 import StudentApp from './student.jsx';
@@ -12,7 +13,7 @@ import GuardApp from './guard.jsx';
 import AdminApp from './admin.jsx';
 
 const ROLES = [
-  { id: 'student', label: 'Student', icon: 'user', title: 'Student app', who: 'Priya Sharma · 21BRS045', desc: 'Rotating QR ID, Saathi Walk night escort, LabLedger and your privacy.' },
+  { id: 'student', label: 'Student', icon: 'user', title: 'Student app', who: '', desc: 'Rotating QR ID, Saathi Walk night escort, LabLedger and your privacy.' },
   { id: 'guard', label: 'Guard', icon: 'shield', title: 'Guard console', who: 'Ramesh, Sunita, Imran', desc: 'Live alerts, CCTV camera wall with PTZ and talk-down, campus map.' },
   { id: 'admin', label: 'Admin', icon: 'chart', title: 'Admin dashboard', who: 'Security & lab office', desc: '3D digital twin, CCTV health, visitor passes, lab stock and audit log.' },
 ];
@@ -29,8 +30,27 @@ function useMedia(q) {
   return m;
 }
 
+// Everything recorded in the app is kept on this device, so it survives a restart.
+const STORE_KEY = 'kavach-state';
+function loadState() {
+  try {
+    const v = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+    if (v && v.v === STATE_VERSION) return { ...v, toasts: [] };
+  } catch (e) { /* storage unavailable or corrupt: start fresh */ }
+  return makeInitial();
+}
+function saveState(s) {
+  const data = { ...s, toasts: [] };
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); return; } catch (e) { /* probably full */ }
+  // out of space: drop the oldest snapshots and try again
+  try {
+    const slim = { ...data, alerts: data.alerts.map((a, i) => (i < 15 ? a : { ...a, snap: null })) };
+    localStorage.setItem(STORE_KEY, JSON.stringify(slim));
+  } catch (e) { /* give up quietly; the app keeps working in memory */ }
+}
+
 function App() {
-  const [s, setS] = useState(makeInitial);
+  const [s, setS] = useState(loadState);
   const [now, setNow] = useState(Date.now());
   const [started, setStarted] = useState(false);
   const [role, setRoleState] = useState('student');
@@ -45,9 +65,21 @@ function App() {
   const mutate = useCallback((fn) => setS((prev) => { const d = structuredClone(prev); fn(d); return d; }), []);
   const setRole = useCallback((r) => { setRoleState(r); setStarted(true); }, []);
   const reset = useCallback(() => {
-    setS(() => { const d = makeInitial(); toast(d, 'all', 'Demo reset. All mock data restored.', 'success'); return d; });
+    if (!window.confirm('Erase everything recorded on this device (alerts, scans, walks, visitors, audit log, enrolled faces)?')) return;
+    Object.values(STUDENTS).forEach((st) => deleteTemplate(st.id));
+    setS((prev) => { const d = makeInitial(prev.gender); toast(d, 'all', 'All data cleared. Starting fresh.', 'success'); return d; });
     setGen((g) => g + 1);
   }, []);
+
+  // save shortly after changes (the 1 s clock tick only rewrites when something changed)
+  const saved = useRef('');
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const key = JSON.stringify([s.seq, s.alerts.length, s.gate.log.length, s.walk && s.walk.steps.map((x) => x.status), s.gender, s.visitors, s.issued.length, s.audit.length, s.cams]);
+      if (key !== saved.current) { saved.current = key; saveState(s); }
+    }, 800);
+    return () => clearTimeout(t);
+  }, [s]);
 
   useEffect(() => {
     const id = setInterval(() => { setNow(Date.now()); mutate(tick); }, 1000);
@@ -125,7 +157,7 @@ function Phone({ framed, role, children }) {
   // Overlays (sheets, camera viewer, prompts) are absolutely positioned inside the
   // content box below the status bar / role bar, so they never hide under it.
   const inner = (
-    <div data-phone={role} className="flex h-full w-full flex-col overflow-hidden bg-slate-50">
+    <div data-phone={role} className={cls('flex h-full w-full flex-col overflow-hidden bg-slate-50', role === 'student' && GENDER[s.gender].theme)}>
       {framed && <StatusBar dark={role !== 'start' && role !== 'student'} />}
       {showBar && (
         <div className="flex shrink-0 items-center gap-2 border-b border-line bg-[#060c11] px-3 py-1.5 pt-[max(6px,env(safe-area-inset-top))]">
@@ -179,7 +211,7 @@ function RoleSwitch({ value, onChange, compact, light }) {
           <button key={r.id} type="button" role="tab" aria-selected={on} onClick={() => onChange(r.id)}
             className={cls('flex flex-1 items-center justify-center gap-1.5 rounded-full font-semibold transition',
               compact ? 'h-7 text-xs' : 'h-10 text-sm',
-              on ? 'bg-brand text-ink shadow-[0_0_14px_-4px_rgba(0,229,255,.8)]' : 'text-slate-500 hover:text-slate-900')}>
+              on ? 'bg-brand text-ink shadow-[0_0_14px_-4px_rgb(var(--brand)/0.8)]' : 'text-slate-500 hover:text-slate-900')}>
             {!compact && <Icon name={r.icon} className="h-4 w-4" />}{r.label}
           </button>
         );
@@ -189,15 +221,16 @@ function RoleSwitch({ value, onChange, compact, light }) {
 }
 
 function StartScreen({ onOpen }) {
+  const { s } = useApp();
   const [pick, setPick] = useState('student');
   const r = ROLES.find((x) => x.id === pick);
   return (
-    <div className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto bg-gradient-to-b from-[#0a2029] via-ink to-ink text-white">
+    <div className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto bg-gradient-to-b from-brand/15 via-ink to-ink text-white">
       <div className="px-5 pt-4"><RoleSwitch value={pick} onChange={setPick} /></div>
       <div className="flex flex-col items-center px-6 pt-7 text-center">
         <div className="relative">
           <span className="pulse-soft absolute inset-0 rounded-[26px] bg-brand/30" />
-          <div className="relative grid h-24 w-24 place-items-center rounded-[26px] bg-ink p-2 shadow-[0_0_40px_-8px_rgba(0,229,255,.6)] ring-1 ring-brand/40"><Logo className="h-full w-full" /></div>
+          <div className="relative grid h-24 w-24 place-items-center rounded-[26px] bg-ink p-2 shadow-[0_0_40px_-8px_rgb(var(--brand)/0.6)] ring-1 ring-brand/40"><Logo className="h-full w-full" /></div>
         </div>
         <h1 className="mt-5 font-display text-[44px] font-bold uppercase leading-none tracking-[.08em]">Kavach</h1>
         <p className="mt-2 text-sm font-medium text-white/80">Smart campus safety and asset protection</p>
@@ -205,17 +238,18 @@ function StartScreen({ onOpen }) {
       </div>
 
       <div className="mt-7 px-5">
-        <div key={pick} className="fade-up rounded-3xl bg-card p-5 text-slate-900 shadow-xl ring-1 ring-line">
+        <div key={pick} className={cls('fade-up rounded-3xl bg-card p-5 text-slate-900 shadow-xl ring-1 ring-line', pick === 'student' && GENDER[s.gender].theme)}>
           <div className="flex items-center gap-3">
-            {pick === 'student' ? <Avatar size={52} className="ring-line" /> : (
+            {pick === 'student' ? <Avatar size={52} gender={s.gender} /> : (
               <span className="grid h-[52px] w-[52px] place-items-center rounded-2xl bg-brand text-ink"><Icon name={r.icon} className="h-6 w-6" /></span>
             )}
             <div>
               <div className="font-display text-xl font-semibold">{r.title}</div>
-              <div className="text-xs text-slate-500">{r.who}</div>
+              <div className="text-xs text-slate-500">{pick === 'student' ? `${STUDENTS[s.gender].name} · ${STUDENTS[s.gender].id}` : r.who}</div>
             </div>
           </div>
           <p className="mt-3 text-sm text-slate-600">{r.desc}</p>
+          {pick === 'student' && <GenderSwitch className="mt-3" />}
           <Btn v="accent" size="lg" className="mt-4 w-full" onClick={() => onOpen(pick)}>Open {r.label.toLowerCase()} app<Icon name="chevR" /></Btn>
         </div>
       </div>
@@ -231,7 +265,7 @@ function StartScreen({ onOpen }) {
             <div><div className="text-sm font-semibold">{t}</div><div className="text-xs text-white/65">{d}</div></div>
           </div>
         ))}
-        <p className="pt-2 text-center text-[11px] text-white/50">Prototype for {CAMPUS_SHORT} · all data is mock · {STUDENT.name} is a demo student</p>
+        <p className="pt-2 text-center text-[11px] text-white/50">Prototype for {CAMPUS_SHORT} · starts empty, everything shown comes from what you do · Priya and Aarav are demo students</p>
       </div>
     </div>
   );
@@ -263,12 +297,12 @@ function TopBar({ started, setStarted, split, setSplit, canSplit }) {
 }
 
 const GUIDE = [
-  ['student', 'My ID', 'Unlock with fingerprint, watch the QR rotate, simulate a gate scan, then scan again to see anti-passback.'],
-  ['student', 'Saathi Walk', 'Help me get home → Start. Pass a checkpoint, then try Go missing and let the 30 s timer run out.'],
-  ['guard', 'Guard', 'See the missed checkpoint with last photo. Tap Live CAM to open the camera, then accept and play the speaker.'],
-  ['guard', 'Cameras', 'Open the camera wall. Use Demo to tamper a camera or take one offline and watch it turn amber.'],
-  ['admin', 'Admin twin', 'Open the 3D digital twin and the command centre. Tap a camera cone to see its feed.'],
-];
+  ['student', 'Pick a student', 'Female (pink) or male (blue). Unlock My ID and simulate a gate scan, then scan again to see anti-passback.'],
+  ['guard', 'Connect cameras', 'Guard → Cameras → Find cameras. Assign your webcam to a camera, e.g. CAM-A1 at the Library, and walk in front of it.'],
+  ['student', 'Saathi Walk', 'Help me get home → Start. With a camera at the Library the check-in photo is real (anonymised). Try Go missing.'],
+  ['guard', 'Respond', 'Accept the alert, open the live camera, play the speaker warning, resolve it.'],
+  ['admin', 'Admin', 'Every number, the heatmap, twin and audit log fill in from what you just did.'],
+]
 
 function DemoGuide() {
   const { setRole } = useApp();

@@ -16,7 +16,7 @@ import { BOUNDARY, BUILDINGS, CAMERAS, CHECKPOINTS, GROUND, LAWNS, ORIGIN, ROADS
 const C = (css, a = 1) => Color.fromCssColorString(css).withAlpha(a);
 const pos = (x, y, z = 0) => { const g = toGeo(x, y); return Cartesian3.fromDegrees(g.lon, g.lat, z); };
 const KIND_COLOR = { academic: '#1d3a46', admin: '#25495a', hostel: '#1f3b4d', amenity: '#1b333d', research: '#173f35', lab: '#1e4250' };
-const CAM_COLOR = { online: '#00e5ff', offline: '#64748b', tampered: '#f59e0b' };
+const CAM_COLOR = { online: '#00e5ff', none: '#4b6370', offline: '#64748b', tampered: '#f59e0b' };
 const ALERT_COLOR = { critical: '#F43F5E', high: '#F43F5E', medium: '#f59e0b' };
 const AREA = { w: 700, d: 560 }; // painted ground, a bit larger than the campus wall
 
@@ -161,12 +161,12 @@ function create(container, { onPick } = {}) {
     if (L.cams !== false) {
       const inst = [];
       for (const cam of CAMERAS) {
-        const st = (d.cams && d.cams[cam.id]) || 'online';
+        const st = (d.cams && d.cams[cam.id]) || 'none';
         const sel = d.selected === 'cam:' + cam.id;
         inst.push(new GeometryInstance({
           id: 'cam:' + cam.id,
           geometry: new PolygonGeometry({ polygonHierarchy: new PolygonHierarchy(wedge(cam)), height: 0.4, vertexFormat: PerInstanceColorAppearance.FLAT_VERTEX_FORMAT }),
-          attributes: { color: ColorGeometryInstanceAttribute.fromColor(C(st === 'online' ? '#00e5ff' : CAM_COLOR[st], sel ? 0.4 : 0.16)) },
+          attributes: { color: ColorGeometryInstanceAttribute.fromColor(C(CAM_COLOR[st], sel ? 0.4 : st === 'none' ? 0.06 : 0.16)) },
         }));
         lines.add({ positions: [pos(cam.x, cam.y, 0), pos(cam.x, cam.y, 7)], width: 2, material: Material.fromType('Color', { color: C('#4b6370') }) });
         pts.add({ position: pos(cam.x, cam.y, 7), pixelSize: sel ? 14 : 10, color: C(CAM_COLOR[st]), outlineColor: C('#ffffff'), outlineWidth: 2, id: 'cam:' + cam.id, disableDepthTestDistance: Number.POSITIVE_INFINITY });

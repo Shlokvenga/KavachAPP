@@ -80,8 +80,8 @@ export function Icon({ name, className = 'h-5 w-5', sw = 2 }) {
 export function Logo({ className = 'h-8 w-8' }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <rect x=".5" y=".5" width="23" height="23" rx="6" fill="#060c11" stroke="#00e5ff" strokeOpacity=".45" />
-      <path d="M12 19.5s6-3 6-7.5V7l-6-2.2L6 7v5c0 4.5 6 7.5 6 7.5z" fill="rgba(0,229,255,.1)" stroke="#00e5ff" strokeWidth="1.5" strokeLinejoin="round" />
+      <rect x=".5" y=".5" width="23" height="23" rx="6" fill="#060c11" style={{ stroke: 'rgb(var(--brand) / .45)' }} />
+      <path d="M12 19.5s6-3 6-7.5V7l-6-2.2L6 7v5c0 4.5 6 7.5 6 7.5z" strokeWidth="1.5" strokeLinejoin="round" style={{ fill: 'rgb(var(--brand) / .1)', stroke: 'rgb(var(--brand))' }} />
       <path d="m9.2 11.9 2 2 3.7-3.9" stroke="#10B981" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -93,8 +93,8 @@ export const Card = ({ className = '', children, ...p }) => (
 );
 
 const BTN = {
-  primary: 'bg-brand text-ink hover:bg-brand-light active:bg-brand-dark shadow-[0_0_18px_-6px_rgba(0,229,255,.7)]',
-  accent: 'bg-accent text-ink hover:brightness-110 active:brightness-95 shadow-[0_0_18px_-6px_rgba(0,229,255,.7)]',
+  primary: 'bg-brand text-ink hover:bg-brand-light active:bg-brand-dark shadow-[0_0_18px_-6px_rgb(var(--brand)/0.7)]',
+  accent: 'bg-accent text-ink hover:brightness-110 active:brightness-95 shadow-[0_0_18px_-6px_rgb(var(--brand)/0.7)]',
   danger: 'bg-red-600 text-white hover:bg-red-500 active:bg-red-700 shadow-sm',
   success: 'bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 shadow-sm',
   outline: 'bg-card text-brand ring-1 ring-inset ring-line hover:bg-raise active:bg-raise',
@@ -162,7 +162,7 @@ export function Sheet({ onClose, title, children, tall }) {
   );
 }
 
-export function Ring({ value, max, size = 48, stroke = 4, color = '#00e5ff', track = 'rgba(112,161,177,.25)', children, className }) {
+export function Ring({ value, max, size = 48, stroke = 4, color = 'rgb(var(--brand))', track = 'rgba(112,161,177,.25)', children, className }) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const off = c * (1 - Math.max(0, Math.min(1, value / max)));
@@ -170,8 +170,8 @@ export function Ring({ value, max, size = 48, stroke = 4, color = '#00e5ff', tra
     <div className={cls('relative shrink-0', className)} style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
         <circle cx={size / 2} cy={size / 2} r={r} stroke={track} strokeWidth={stroke} fill="none" />
-        <circle cx={size / 2} cy={size / 2} r={r} stroke={color} strokeWidth={stroke} fill="none" strokeLinecap="round"
-          strokeDasharray={c} strokeDashoffset={off} style={{ transition: 'stroke-dashoffset .25s linear' }} />
+        <circle cx={size / 2} cy={size / 2} r={r} strokeWidth={stroke} fill="none" strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={off} style={{ stroke: color, transition: 'stroke-dashoffset .25s linear' }} />
       </svg>
       <div className="absolute inset-0 grid place-items-center">{children}</div>
     </div>
@@ -197,7 +197,7 @@ export function QR({ text, size = 200, fade }) {
         <rect width={logo} height={logo} rx={logo * 0.22} fill="#fff" />
         <svg x={logo * 0.1} y={logo * 0.1} width={logo * 0.8} height={logo * 0.8} viewBox="0 0 24 24">
           <rect width="24" height="24" rx="6" fill="#05090d" />
-          <path d="M12 19.5s6-3 6-7.5V7l-6-2.2L6 7v5c0 4.5 6 7.5 6 7.5z" fill="none" stroke="#00e5ff" strokeWidth="1.6" />
+          <path d="M12 19.5s6-3 6-7.5V7l-6-2.2L6 7v5c0 4.5 6 7.5 6 7.5z" fill="none" strokeWidth="1.6" style={{ stroke: 'rgb(var(--brand))' }} />
           <path d="m9.2 11.9 2 2 3.7-3.9" stroke="#10B981" strokeWidth="2.2" fill="none" strokeLinecap="round" />
         </svg>
       </g>
@@ -205,17 +205,20 @@ export function QR({ text, size = 200, fade }) {
   );
 }
 
-export function Avatar({ size = 48, className }) {
+export function Avatar({ size = 48, className, gender = 'female' }) {
+  const male = gender === 'male';
   return (
-    <svg viewBox="0 0 64 64" width={size} height={size} className={cls('shrink-0 rounded-full ring-2 ring-brand/40', className)} role="img" aria-label="Priya Sharma photo">
-      <circle cx="32" cy="32" r="32" fill="#13303b" />
-      <path d="M17 27c-1 10 0 17 4 21l5-3c-3-4-4-10-3-16z" fill="#1f2937" />
-      <path d="M47 27c1 10 0 17-4 21l-5-3c3-4 4-10 3-16z" fill="#1f2937" />
-      <path d="M10 64c2-12 11-18 22-18s20 6 22 18z" fill="#0e7490" />
+    <svg viewBox="0 0 64 64" width={size} height={size} className={cls('shrink-0 rounded-full ring-2 ring-brand/40', className)} role="img" aria-label="Student photo">
+      <circle cx="32" cy="32" r="32" style={{ fill: 'rgb(var(--brand) / .18)' }} />
+      {!male && <path d="M17 27c-1 10 0 17 4 21l5-3c-3-4-4-10-3-16z" fill="#1f2937" />}
+      {!male && <path d="M47 27c1 10 0 17-4 21l-5-3c3-4 4-10 3-16z" fill="#1f2937" />}
+      <path d="M10 64c2-12 11-18 22-18s20 6 22 18z" style={{ fill: 'rgb(var(--brand-dark))' }} />
       <path d="M27 42h10v6a5 5 0 0 1-10 0z" fill="#B97A4E" />
       <ellipse cx="32" cy="30" rx="11" ry="13" fill="#C98B5C" />
-      <path d="M20 29c0-11 6-16 12-16s13 5 12 16c-3-6-7-9-12-9.5-2 3-7 7-12 9.5z" fill="#1f2937" />
-      <circle cx="32" cy="23.5" r="1.1" fill="#dc2626" />
+      {male
+        ? <path d="M20.5 27c-.5-9 5-14 11.5-14s12.5 4 11.5 14c-2-4-5-6.5-11.5-6.5S22.5 23 20.5 27z" fill="#1f2937" />
+        : <path d="M20 29c0-11 6-16 12-16s13 5 12 16c-3-6-7-9-12-9.5-2 3-7 7-12 9.5z" fill="#1f2937" />}
+      {!male && <circle cx="32" cy="23.5" r="1.1" fill="#dc2626" />}
       <circle cx="27.5" cy="31" r="1.2" fill="#1f2937" />
       <circle cx="36.5" cy="31" r="1.2" fill="#1f2937" />
       <path d="M29 37c1.8 1.4 4.2 1.4 6 0" stroke="#7c2d12" strokeWidth="1.3" fill="none" strokeLinecap="round" />
@@ -223,88 +226,25 @@ export function Avatar({ size = 48, className }) {
   );
 }
 
-// Night-time still from a checkpoint camera (illustration).
-export function NightPhoto({ cp, time, className, deleted, cam }) {
-  const ts = new Date(time);
-  const stamp = `${cam || 'CAM-' + CP[cp].tag.toUpperCase()} · ${pad(ts.getHours())}:${pad(ts.getMinutes())}:${pad(ts.getSeconds())}`;
+// A checkpoint photo: the anonymised frame from a real connected camera, or an
+// honest placeholder when no camera was connected at that checkpoint.
+export function CheckpointPhoto({ snap, cam, time, className, deleted }) {
+  const ts = time ? new Date(time) : null;
+  const stamp = `${cam || 'Camera'}${ts ? ` · ${pad(ts.getHours())}:${pad(ts.getMinutes())}:${pad(ts.getSeconds())}` : ''}`;
   return (
-    <div className={cls('relative overflow-hidden rounded-xl bg-ink', className)}>
-      <svg viewBox="0 0 160 100" className={cls('h-full w-full', deleted && 'opacity-30 grayscale')} preserveAspectRatio="xMidYMid slice">
-        <defs>
-          <radialGradient id={`lamp-${cp}`} cx="0.72" cy="0.18" r="0.6">
-            <stop offset="0" stopColor="#fde68a" stopOpacity=".55" />
-            <stop offset="1" stopColor="#0f172a" stopOpacity="0" />
-          </radialGradient>
-        </defs>
-        <rect width="160" height="100" fill="#0b1224" />
-        <rect width="160" height="100" fill={`url(#lamp-${cp})`} />
-        <path d="M0 78 L160 64 L160 100 L0 100Z" fill="#1e293b" />
-        <path d="M40 100 L95 66 L110 66 L90 100Z" fill="#334155" />
-        <rect x="114" y="14" width="2.5" height="56" fill="#475569" />
-        <path d="M108 14h16" stroke="#475569" strokeWidth="2.5" />
-        <circle cx="120" cy="16" r="2.5" fill="#fde68a" />
-        <rect x="8" y="30" width="26" height="40" fill="#1e293b" />
-        <rect x="12" y="36" width="5" height="5" fill="#f59e0b" opacity=".6" />
-        <rect x="22" y="46" width="5" height="5" fill="#f59e0b" opacity=".4" />
-        <g transform="translate(78 44)">
-          <circle cx="0" cy="0" r="4.2" fill="#94a3b8" />
-          <path d="M-5 6 Q0 3 5 6 L6 22 L-6 22Z" fill="#64748b" />
-          <path d="M-3 22 L-4 32 M3 22 L4 32" stroke="#64748b" strokeWidth="2.6" strokeLinecap="round" />
-          <path d="M-5 9 l-3 9 M5 9 l3 9" stroke="#64748b" strokeWidth="2" strokeLinecap="round" />
-        </g>
-      </svg>
-      <div className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded bg-black/50 px-1 py-0.5 font-mono text-[8px] text-white">
-        <span className="h-1.5 w-1.5 rounded-full bg-red-500 blink" />{stamp}
-      </div>
-      {deleted && (
-        <div className="absolute inset-0 grid place-items-center">
-          <span className="flex items-center gap-1 rounded-full bg-card/90 px-2 py-0.5 text-[10px] font-bold text-slate-700"><Icon name="trash" className="h-3 w-3" />Deleted</span>
-        </div>
-      )}
+    <div className={cls('relative overflow-hidden rounded-xl bg-ink ring-1 ring-line', className)}>
+      {snap && !deleted
+        ? <img src={snap} alt="Anonymised checkpoint photo" className="h-full w-full object-cover" />
+        : (
+          <div className="grid h-full w-full place-items-center p-1 text-center">
+            <div>
+              <Icon name={deleted ? 'trash' : 'cameraOff'} className="mx-auto h-4 w-4 text-slate-500" />
+              <div className="mt-0.5 text-[9px] font-semibold leading-tight text-slate-500">{deleted ? 'Deleted' : 'No camera connected'}</div>
+            </div>
+          </div>
+        )}
+      <div className="absolute left-1 top-1 rounded bg-black/55 px-1 py-0.5 font-mono text-[8px] text-white">{stamp}</div>
     </div>
-  );
-}
-
-// 10 second clip placeholder. Plays a fake clip and logs the view in the audit log.
-export function ClipPlayer({ cp, cam, onView, label = '10 s clip · faces blurred' }) {
-  const [playing, setPlaying] = useState(false);
-  const [done, setDone] = useState(false);
-  const play = () => {
-    if (playing) return;
-    setPlaying(true); setDone(false);
-    onView && onView();
-    setTimeout(() => { setPlaying(false); setDone(true); }, 10000);
-  };
-  return (
-    <button type="button" onClick={play} className="group relative block aspect-video w-full overflow-hidden rounded-xl bg-ink text-left">
-      <svg viewBox="0 0 160 90" className="h-full w-full" preserveAspectRatio="xMidYMid slice">
-        <rect width="160" height="90" fill="#111827" />
-        <path d="M0 70 L160 58 L160 90 L0 90Z" fill="#1f2937" />
-        <rect x="10" y="20" width="30" height="40" fill="#1f2937" />
-        <rect x="120" y="10" width="2" height="50" fill="#374151" />
-        <g className={playing ? 'transition-transform duration-[10000ms] ease-linear' : ''} style={{ transform: playing ? 'translateX(46px)' : 'none' }}>
-          <rect x="52" y="40" width="10" height="10" fill="#6b7280" />
-          <rect x="50" y="50" width="14" height="20" fill="#4b5563" />
-          <rect x="70" y="42" width="9" height="9" fill="#6b7280" />
-          <rect x="68" y="51" width="13" height="19" fill="#4b5563" />
-        </g>
-        {Array.from({ length: 12 }).map((_, i) => <rect key={i} x="0" y={i * 8} width="160" height="1" fill="#fff" opacity=".03" />)}
-      </svg>
-      <div className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded bg-black/50 px-1.5 py-0.5 font-mono text-[9px] text-white">
-        <span className="h-1.5 w-1.5 rounded-full bg-red-500 blink" />{cam || 'CAM-' + CP[cp].tag.toUpperCase()}
-      </div>
-      {!playing && (
-        <div className="absolute inset-0 grid place-items-center">
-          <span className="grid h-11 w-11 place-items-center rounded-full bg-card/90 text-brand shadow-lg transition group-hover:scale-105">
-            <Icon name={done ? 'refresh' : 'play'} className="h-5 w-5" />
-          </span>
-        </div>
-      )}
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pb-1.5 pt-4 text-[10px] font-medium text-white">
-        {playing ? 'Playing… view logged in audit' : label}
-        {playing && <div className="mt-1 h-1 overflow-hidden rounded bg-white/20"><div className="h-full bg-accent" style={{ animation: 'progress 10s linear both' }} /></div>}
-      </div>
-    </button>
   );
 }
 
@@ -399,7 +339,7 @@ const TOAST_STYLE = {
   success: ['bg-emerald-600', 'checkCircle'],
   alert: ['bg-red-600', 'alert'],
   warn: ['bg-amber-600', 'alert'],
-  info: ['bg-[#0b2a35] ring-1 ring-brand/40', 'bell'],
+  info: ['bg-[#0a1218] ring-1 ring-brand/40', 'bell'],
 };
 const ROLE_LABEL = { student: 'Student app', guard: 'Guard app', admin: 'Admin' };
 
