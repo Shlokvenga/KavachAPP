@@ -19,20 +19,23 @@ const KIND_COLOR = { academic: '#1d3a46', admin: '#25495a', hostel: '#1f3b4d', a
 const CAM_COLOR = { online: '#00e5ff', none: '#4b6370', offline: '#64748b', tampered: '#f59e0b' };
 const ALERT_COLOR = { critical: '#F43F5E', high: '#F43F5E', medium: '#f59e0b' };
 // painted ground: the campus bounding box plus a margin of surrounding city
-const AREA = { x0: BOUNDS.minX - 80, x1: BOUNDS.maxX + 80, y0: BOUNDS.minY - 80, y1: BOUNDS.maxY + 80 };
+const AREA = { x0: BOUNDS.minX - 500, x1: BOUNDS.maxX + 500, y0: BOUNDS.minY - 500, y1: BOUNDS.maxY + 500 };
 
 function paintGround() {
-  const px = 1.5; // pixels per metre
+  const px = 1.2; // pixels per metre
   const cv = document.createElement('canvas');
   cv.width = Math.round((AREA.x1 - AREA.x0) * px); cv.height = Math.round((AREA.y1 - AREA.y0) * px);
   const g = cv.getContext('2d');
   const X = (x) => (x - AREA.x0) * px;
   const Y = (y) => (AREA.y1 - y) * px;
   const path = (line, close) => { g.beginPath(); line.forEach(([x, y], i) => (i ? g.lineTo(X(x), Y(y)) : g.moveTo(X(x), Y(y)))); if (close) g.closePath(); };
-  g.fillStyle = '#071015'; g.fillRect(0, 0, cv.width, cv.height); // city outside
+  // city outside, fading into the sky colour at the edges so there is no hard horizon
+  const grad = g.createRadialGradient(X(0), Y(0), 200 * px, X(0), Y(0), Math.max(cv.width, cv.height) * 0.55);
+  grad.addColorStop(0, '#08141a'); grad.addColorStop(1, '#05090d');
+  g.fillStyle = grad; g.fillRect(0, 0, cv.width, cv.height);
   // PB Road runs along the south-west edge of the campus
   g.strokeStyle = '#121f26'; g.lineWidth = 16 * px; g.lineCap = 'round';
-  path([[-470, 215], [-180, -145], [-60, -175], [90, -260]]); g.stroke();
+  path([[-760, 575], [-470, 215], [-180, -145], [-60, -175], [90, -260], [390, -430]]); g.stroke();
   g.fillStyle = '#0b171d'; path(BOUNDARY, true); g.fill();
   g.lineCap = 'round'; g.lineJoin = 'round';
   for (const [w, col] of [[9, '#132630'], [6, '#1d3540']]) {
@@ -233,7 +236,7 @@ function create(container, { onPick } = {}) {
   }, ScreenSpaceEventType.LEFT_CLICK);
 
   const VIEWS = {
-    overview: { x: 20, y: -640, z: 560, pitch: -42, heading: 0 },
+    overview: { x: 20, y: -560, z: 470, pitch: -42, heading: 0 },
     top: { x: 60, y: -40, z: 1500, pitch: -90, heading: 0 },
     walk: { x: -150, y: -330, z: 380, pitch: -38, heading: 0 },
   };

@@ -1,21 +1,21 @@
-// Shared in-memory state. Every role (Student, Guard, Admin) reads and writes this
-// one object, so a change in one app shows up live in the others.
-// Each action below receives a draft (a fresh clone) and mutates it.
-import { createContext, useContext } from 'react';
+// Shared state actions. Every role (Student, Guard, Admin) reads and writes one
+// state object, so a change in one app shows up live in the others. Each action
+// receives a draft (a fresh clone) and mutates it. They run in the browser and,
+// when phones are paired, on the laptop hub too, so nothing here may use React or
+// browser-only APIs without a guard. src/actions.js names them.
 import {
   ALERT_TYPES, CP, ESCALATE_MS, MIN, ROUTES, camById, camsAt, cpShort, distM, fmtTime, presence, studentById, studentOf, verifyQr,
 } from './data.js';
 import { RULES } from './vision/rules.js';
 
-export const AppCtx = createContext(null);
-export const useApp = () => useContext(AppCtx);
-
 export function vibrate(pattern = [180, 80, 180]) {
-  try { navigator.vibrate && navigator.vibrate(pattern); } catch (e) { /* not supported */ }
+  try { if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(pattern); } catch (e) { /* not supported */ }
 }
 
-export function toast(d, role, msg, kind = 'info') {
-  d.toasts.push({ id: ++d.seq, role, msg, kind, until: Date.now() + 3600 });
+// Student toasts are addressed to one student, so with several phones paired
+// each student only sees their own.
+export function toast(d, role, msg, kind = 'info', sid = role === 'student' ? studentOf(d).id : null) {
+  d.toasts.push({ id: ++d.seq, role, msg, kind, sid, until: Date.now() + 3600 });
   if (d.toasts.length > 14) d.toasts.shift();
 }
 
@@ -42,13 +42,17 @@ export function createAlert(d, { type, cp, detail, photo = null, walk = false, a
 const findAlert = (d, id) => d.alerts.find((a) => a.id === id);
 
 // ---------- timers (run every second) ----------
+// Returns true if anything changed (the hub only syncs real changes).
 export function tick(d) {
   const now = Date.now();
+  const nToasts = d.toasts.length;
   d.toasts = d.toasts.filter((t) => t.until > now);
+  let changed = d.toasts.length !== nToasts;
 
   const esc = d.alerts.filter((a) => a.status === 'new' && !a.escalated && now - a.time >= ESCALATE_MS);
   for (const a of esc) { a.escalated = true; a.escalatedAt = now; }
   if (esc.length) {
+    changed = true;
     const what = esc.length === 1 ? esc[0].id : `${esc.length} alerts`;
     toast(d, 'guard', `${what} not accepted in 2 min. Escalated to Security Head`, 'warn');
     toast(d, 'admin', `${what} escalated to Security Head`, 'warn');
@@ -59,10 +63,13 @@ export function tick(d) {
     if (w.missing.stage === 'countdown' && now >= w.missing.until) {
       w.missing = { stage: 'prompt', until: now + 30 * 1000 };
       vibrate([300, 120, 300, 120, 300]);
+      changed = true;
     } else if (w.missing.stage === 'prompt' && now >= w.missing.until) {
       raiseMissed(d);
+      changed = true;
     }
   }
+  return changed;
 }
 
 // ---------- student: gate ----------
@@ -79,12 +86,13 @@ export function gateScan(d, dir) {
 export function setGender(d, gender) {
   if (d.walk && d.walk.phase === 'active') { toast(d, 'student', 'Finish your Saathi Walk before switching student', 'warn'); return; }
   d.gender = gender;
-  d.walk = null;
 }
 
 const walkStudent = (w) => ({ id: w.sid, name: w.name, gender: w.gender });
 
 // ---------- student: Saathi Walk ----------
+// The walk belongs to one student; another paired phone must not drive it.
+export const myWalk = (s) => (s.walk && s.walk.sid === studentOf(s).id ? s.walk : null);
 export const lastPassed = (w) => [...w.steps].reverse().find((s) => s.status === 'passed');
 export const nextStep = (w) => w.steps.find((s) => s.status !== 'passed');
 
@@ -93,6 +101,10 @@ export function startWalk(d, destKey, sharing, { femaleGuard = false, snap = nul
   const r = ROUTES[destKey];
   const st = studentOf(d);
   const now = Date.now();
+  if (d.walk && d.walk.phase === 'active' && d.walk.sid !== st.id) {
+    toast(d, 'student', `${d.walk.first} is on a Saathi Walk right now. This prototype escorts one walk at a time.`, 'warn');
+    return;
+  }
   d.walk = {
     id: 'W-' + ++d.seq,
     sid: st.id,
@@ -180,13 +192,13 @@ export function raiseMissed(d) {
   });
   w.missing = { stage: 'alerted' };
   w.missedAlert = a.id;
-  toast(d, 'student', `Guard ${guardById(d, w.guard).name} has been alerted`, 'warn');
+  toast(d, 'student', `Guard ${guardById(d, w.guard).name} has been alerted`, 'warn', w.sid);
 }
 
 export function answerOk(d) {
   const w = d.walk;
   w.missing = null;
-  toast(d, 'student', 'Glad you are OK. Your walk continues.', 'success');
+  toast(d, 'student', 'Glad you are OK. Your walk continues.', 'success', d.walk && d.walk.sid);
 }
 
 export function sos(d) {
@@ -203,7 +215,7 @@ export function sos(d) {
     student: walkStudent(w),
   });
   w.sosAlert = a.id;
-  toast(d, 'student', `SOS sent. Guard ${guardById(d, w.guard).name} notified.`, 'alert');
+  toast(d, 'student', `SOS sent. Guard ${guardById(d, w.guard).name} notified.`, 'alert', w.sid);
   vibrate([400, 100, 400]);
 }
 
@@ -233,7 +245,7 @@ export function follower(d) {
   w.followerAt = Date.now();
   w.followerAlert = a.id;
   vibrate([120, 60, 120, 60, 120]);
-  toast(d, 'student', `Guard ${g.name} notified discreetly`, 'warn');
+  toast(d, 'student', `Guard ${g.name} notified discreetly`, 'warn', w.sid);
 }
 
 // ---------- guard ----------
@@ -249,14 +261,14 @@ export function acceptAlert(d, id, guardId) {
   g.x = cp.x - 10;
   g.y = cp.y - 10;
   toast(d, 'guard', `Navigating to ${cp.name} · ${a.dist} m · ~${Math.max(1, Math.ceil(a.dist / 80))} min`, 'info');
-  if (a.walk) toast(d, 'student', `Guard ${g.name} accepted and is on the way`, 'success');
+  if (a.walk) toast(d, 'student', `Guard ${g.name} accepted and is on the way`, 'success', a.student && a.student.id);
 }
 
 export function toggleLights(d, id) {
   const a = findAlert(d, id);
   a.lights = !a.lights;
   toast(d, 'guard', `Area lights ${a.lights ? 'ON' : 'OFF'} · ${CP[a.cp].name}`, a.lights ? 'success' : 'info');
-  if (a.walk && a.lights) toast(d, 'student', 'Lights near you were turned on', 'info');
+  if (a.walk && a.lights) toast(d, 'student', 'Lights near you were turned on', 'info', a.student && a.student.id);
 }
 
 export function playSpeaker(d, id) {
@@ -280,7 +292,7 @@ export function resolveAlert(d, id, guardId) {
   const g = guardById(d, guardId);
   toast(d, 'guard', `${a.id} resolved by ${g.name}`, 'success');
   toast(d, 'admin', `${a.id} resolved by ${g.name}`, 'success');
-  if (a.walk) toast(d, 'student', `Guard ${g.name} marked your alert resolved`, 'success');
+  if (a.walk) toast(d, 'student', `Guard ${g.name} marked your alert resolved`, 'success', a.student && a.student.id);
 }
 
 export function skipTime(d, ms = 2 * MIN) {
@@ -353,7 +365,7 @@ export function equipmentLeaving(d, itemId = 'osc4') {
     const who = studentById(it.holder);
     toast(d, 'guard', `${it.name} passed lab door. Issued to ${who ? who.name : it.holder}. Allowed ✓`, 'success');
     toast(d, 'admin', `${it.name} left lab: issued to ${it.holder}. No alert`, 'success');
-    if (it.holder === studentOf(d).id) toast(d, 'student', `${it.name} checked out on your account at lab door`, 'info');
+    toast(d, 'student', `${it.name} checked out on your account at lab door`, 'info', it.holder);
     return false;
   }
   createAlert(d, { type: 'lab', cp: 'LAB', cam: 'CAM-L1', detail: `${it.name} (RFID ${it.rfid}) passed the lab door without being issued.` });
@@ -399,7 +411,7 @@ export function returnItem(d, issueId, missing) {
   if (it.rfid) it.holder = null;
   if (is.qty > 1) d.returnCount += 1;
   if (missing) toast(d, 'admin', `Short return: ${missing} ${it.short} missing (${(studentById(is.sid) || {}).name || is.sid})`, 'warn');
-  toast(d, 'student', missing ? `Returned with ${missing} ${it.short} reported missing` : `Returned: ${is.qty} × ${is.name} ✓`, missing ? 'warn' : 'success');
+  toast(d, 'student', missing ? `Returned with ${missing} ${it.short} reported missing` : `Returned: ${is.qty} × ${is.name} ✓`, missing ? 'warn' : 'success', is.sid);
 }
 
 export function raiseDispute(d, label, reason) {
@@ -447,13 +459,13 @@ export function gateQr(d, camId, text, face) {
   d.ai.gate.unshift(rec);
   d.ai.gate = d.ai.gate.slice(0, 12);
   const faceTxt = face ? (face.decision === 'MATCH' ? ` · face 1:1 ${(face.sim * 100).toFixed(0)}%, live ✓` : face.decision === 'NOT ENROLLED' ? ' · no face enrolled' : '') : '';
-  const mine = q.id && q.id === studentOf(d).id;
+  // the student toast goes to the pass holder, whichever device ran the camera
   if (rec.ok) {
     toast(d, 'guard', `${cam.name}: ${holder.name} → ${rec.dir}${faceTxt}`, 'success');
-    if (mine) toast(d, 'student', `Entry logged at the gate: ${rec.dir}, ${fmtTime(now)}${faceTxt}`, 'success');
+    toast(d, 'student', `Entry logged at the gate: ${rec.dir}, ${fmtTime(now)}${faceTxt}`, 'success', q.id);
   } else {
     toast(d, 'guard', `${cam.name}: rejected. ${rec.reason}`, 'alert');
-    if (mine) toast(d, 'student', `Gate rejected your pass: ${rec.reason}`, 'alert');
+    if (holder) toast(d, 'student', `Gate rejected your pass: ${rec.reason}`, 'alert', q.id);
   }
 }
 

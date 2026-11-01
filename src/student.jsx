@@ -4,23 +4,21 @@ import {
   CAMERAS, COLLEGE, CP, DISPUTE_REASONS, GENDER, MIN, QR_PERIOD, ROUTES, STUDENTS, camsAt, cls, cpShort, fmtDay, fmtTime, myLog, presence, qrCode, studentOf,
 } from './data.js';
 import CampusMap from './map.jsx';
-import { CameraFeed } from './cctv.jsx';
+import { CameraFeed, camStatus } from './cctv.jsx';
 import { FaceEnrolPage, GateCheckSheet, useVision } from './vision/ui.jsx';
-import { liveAt, liveCount, snapshotAt } from './vision/live.js';
+import { snapshotAt } from './vision/live.js';
 import { aiSupported } from './vision/engine.js';
-import {
-  answerOk, cancelSos, follower, gateScan, goMissing, guardById, issueItems, lastPassed, nextStep,
-  passNext, raiseDispute, reportDarkSpot, returnItem, setGender, sos, startWalk, toast, useApp,
-} from './store.js';
+import { guardById, lastPassed, myWalk, nextStep } from './store.js';
+import { useApp } from './ctx.js';
 import {
   Avatar, Badge, BottomNav, Btn, Card, CheckpointPhoto, DemoPanel, Icon, LiveDot, QR, ResultSheet, Ring,
   ScanOverlay, ScreenHeader, SectionTitle, Sheet, Stepper, Toggle, useFastNow,
 } from './ui.jsx';
 
 export default function StudentApp() {
-  const { s, mutate, now } = useApp();
+  const { s, act, now } = useApp();
   const [tab, setTab] = useState('home');
-  const w = s.walk;
+  const w = myWalk(s);
   const walking = w && w.phase === 'active';
   const sosOpen = walking && w.sosAlert && s.alerts.find((a) => a.id === w.sosAlert && a.status !== 'resolved');
   const showFollower = walking && w.followerAt && now - w.followerAt < 8000;
@@ -46,7 +44,7 @@ export default function StudentApp() {
       )}
 
       {walking && (
-        <button type="button" onClick={() => (sosOpen ? setTab('walk') : mutate(sos))} aria-label="SOS"
+        <button type="button" onClick={() => (sosOpen ? setTab('walk') : act('sos'))} aria-label="SOS"
           className="absolute bottom-[84px] right-4 z-30 grid h-16 w-16 place-items-center rounded-full bg-red-600 text-white shadow-xl shadow-red-600/40 ring-4 ring-white active:scale-95">
           <span className="pulse-soft absolute inset-0 rounded-full bg-red-500" />
           <span className="relative text-lg font-black tracking-wide">SOS</span>
@@ -73,7 +71,7 @@ function Home({ go }) {
   const inside = presence(s, me.id) === 'IN';
   const log = myLog(s);
   const lastGate = log[0];
-  const w = s.walk;
+  const w = myWalk(s);
   const hr = new Date(now).getHours();
   const greet = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
   const mine = s.issued.filter((i) => i.status === 'issued' && i.sid === me.id);
@@ -170,7 +168,7 @@ function LogRow({ l, now }) {
 
 // ---------------- My ID ----------------
 function MyId() {
-  const { s, mutate, now } = useApp();
+  const { s, act, now } = useApp();
   const [lock, setLock] = useState('locked'); // locked | scanning | open
   const [scan, setScan] = useState(null); // { mode } while scanning
   const [result, setResult] = useState(null);
@@ -196,7 +194,7 @@ function MyId() {
       const d = myDir;
       setResult({ ok: false, title: d === 'IN' ? 'Already inside, scan OUT first' : 'Already outside, scan IN first', note: 'Anti-passback: one pass cannot be used twice in a row.', rows: [['QR code', 'Valid', true], ['Face matched (1:1)', 'Yes', true], [`Entry logged: ${d}`, 'Blocked', false]] });
     } else {
-      mutate((d) => gateScan(d, nextDir));
+      act('gateScan', nextDir);
       setResult({ ok: true, title: nextDir === 'IN' ? `Welcome in, ${me.first}!` : `Goodbye, ${me.first}!`, note: 'Main Gate · Lane 2', rows: [['Face matched (1:1)', '✓', true], ['Liveness', '✓', true], ['Entry logged', `${nextDir}, ${fmtTime(t)}`, true]] });
     }
     setScan(null);
@@ -295,13 +293,14 @@ function MyId() {
 // ---------------- Saathi Walk ----------------
 function SaathiWalk() {
   const { s } = useApp();
-  const w = s.walk;
+  const w = myWalk(s);
   if (!w) return <WalkIntro />;
   if (w.phase === 'arrived') return <WalkArrived />;
   return <WalkActive />;
 }
 
 function RouteSteps({ steps, now, live }) {
+  const { s } = useApp();
   useVision();
   let prevTime = null;
   return (
@@ -339,7 +338,7 @@ function RouteSteps({ steps, now, live }) {
                   <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600"><Icon name={st.snap ? 'camera' : 'check'} className="h-3 w-3" />{st.snap ? `Photo ${fmtTime(st.time)}` : `Checked in ${fmtTime(st.time)}`}</span>
                 )}
                 {(!live || !passed) && (() => {
-                  const n = camsAt(st.cp).length; const on = liveAt(st.cp).length;
+                  const n = camsAt(st.cp).length; const on = camsAt(st.cp).filter((id) => camStatus(s, id) === 'online').length;
                   return <span className={cls('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium', on ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500')}><Icon name="video" className="h-3 w-3" />{n} camera{n === 1 ? '' : 's'} · {on} connected</span>;
                 })()}
               </div>
@@ -352,7 +351,7 @@ function RouteSteps({ steps, now, live }) {
 }
 
 function WalkIntro() {
-  const { s, mutate, now } = useApp();
+  const { s, act, now } = useApp();
   const me = studentOf(s);
   const [pick, setPick] = useState(false);
   const [dest, setDest] = useState(me.home);
@@ -386,7 +385,7 @@ function WalkIntro() {
         </Card>
         <Card className="flex items-center gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-brand"><Icon name="video" /></span>
-          <div className="flex-1 text-sm text-slate-600"><b className="text-slate-900">{CAMERAS.length} cameras</b> on campus, <b className="text-slate-900">{liveCount()} connected</b> now. They watch behaviour, not names.</div>
+          <div className="flex-1 text-sm text-slate-600"><b className="text-slate-900">{CAMERAS.length} cameras</b> on campus, <b className="text-slate-900">{CAMERAS.filter((c) => camStatus(s, c.id) === 'online').length} connected</b> now. They watch behaviour, not names.</div>
         </Card>
         <Btn v="outline" className="w-full" icon="bulb" onClick={() => setReport(true)}>Report a dark spot or broken camera</Btn>
       </div>
@@ -396,7 +395,7 @@ function WalkIntro() {
           <p className="-mt-1 mb-3 text-sm text-slate-500">Maintenance and security get it right away. Your name is not shared.</p>
           <div className="grid grid-cols-2 gap-2">
             {Object.values(CP).map((c) => (
-              <button key={c.id} type="button" onClick={() => { mutate((d) => reportDarkSpot(d, c.id)); setReport(false); }}
+              <button key={c.id} type="button" onClick={() => { act('reportDarkSpot', c.id); setReport(false); }}
                 className="flex items-center gap-2 rounded-2xl bg-slate-50 p-3 text-left text-sm font-semibold text-slate-800 ring-1 ring-slate-200 hover:ring-brand">
                 <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-card text-xs font-extrabold text-brand ring-1 ring-brand/30">{c.tag}</span>{c.name}
               </button>
@@ -430,7 +429,7 @@ function WalkIntro() {
             <div className="text-sm"><div className="font-semibold text-slate-900">Prefer a female guard</div><div className="text-xs text-slate-500">{femaleGuard ? 'Guard Sunita will watch your walk' : `Guard ${s.guards.find((g) => g.id === ROUTES[dest].guard).name} will watch your walk`}</div></div>
             <Toggle on={femaleGuard} onChange={setFemaleGuard} label="Prefer a female guard" />
           </div>
-          <Btn v="accent" size="lg" className="mt-4 w-full" icon="walk" onClick={() => mutate((d) => startWalk(d, dest, share, { femaleGuard, snap: snapshotAt('A') }))}>Start walk · {total} min</Btn>
+          <Btn v="accent" size="lg" className="mt-4 w-full" icon="walk" onClick={() => act('startWalk', dest, share, { femaleGuard, snap: snapshotAt('A') })}>Start walk · {total} min</Btn>
         </Sheet>
       )}
     </div>
@@ -438,10 +437,10 @@ function WalkIntro() {
 }
 
 function WalkActive() {
-  const { s, mutate, now } = useApp();
+  const { s, act, now } = useApp();
   const [finalScan, setFinalScan] = useState(false);
   const [copied, setCopied] = useState(false);
-  const w = s.walk;
+  const w = myWalk(s);
   const r = ROUTES[w.dest];
   const g = guardById(s, w.guard);
   const last = lastPassed(w);
@@ -488,7 +487,7 @@ function WalkActive() {
           <Card className="fade-up border-0 bg-red-600 text-white ring-0">
             <div className="flex items-center gap-2 font-bold"><Icon name="siren" />SOS sent · {fmtTime(sosA.time)}</div>
             <p className="mt-1 text-sm text-red-100">High priority. Last checkpoint {cpShort(last.cp)}. {statusLine(sosA)}.</p>
-            <Btn v="dark" size="sm" className="mt-3 w-full" onClick={() => mutate(cancelSos)}>I'm safe now, cancel SOS</Btn>
+            <Btn v="dark" size="sm" className="mt-3 w-full" onClick={() => act('cancelSos')}>I'm safe now, cancel SOS</Btn>
           </Card>
         )}
 
@@ -536,7 +535,7 @@ function WalkActive() {
         <Card>
           <div className="flex items-center justify-between">
             <div className="text-sm"><div className="font-semibold text-slate-900">Share with a friend</div><div className="text-xs text-slate-500">Live progress, no photos</div></div>
-            <Toggle on={w.sharing} onChange={(v) => mutate((d) => { d.walk.sharing = v; })} label="Share with a friend" />
+            <Toggle on={w.sharing} onChange={(v) => act('walkSharing', v)} label="Share with a friend" />
           </div>
           {w.sharing && (
             <div className="fade-up mt-3 flex items-center gap-2 rounded-xl bg-slate-50 p-2 pl-3 ring-1 ring-slate-200">
@@ -550,12 +549,12 @@ function WalkActive() {
         <DemoPanel title="Demo: simulate the walk">
           <div className="space-y-2">
             <Btn v="success" className="w-full" icon={isFinal ? 'qr' : 'check'} disabled={counting}
-              onClick={() => (isFinal ? setFinalScan(true) : mutate((d) => passNext(d, snapshotAt(next.cp))))}>
+              onClick={() => (isFinal ? setFinalScan(true) : act('passNext', snapshotAt(next.cp)))}>
               {isFinal ? `Scan ${r.finalScan} at ${cpShort(next.cp)}` : `Pass next checkpoint (${cpShort(next.cp)})`}
             </Btn>
             <div className="grid grid-cols-2 gap-2">
-              <Btn v="outline" size="sm" icon="clock" disabled={busy || !!(missA && missA.status !== 'resolved')} onClick={() => mutate(goMissing)}>Go missing</Btn>
-              <Btn v="outline" size="sm" disabled={!!(folA && folA.status !== 'resolved')} onClick={() => mutate(follower)}>Someone is following me</Btn>
+              <Btn v="outline" size="sm" icon="clock" disabled={busy || !!(missA && missA.status !== 'resolved')} onClick={() => act('goMissing')}>Go missing</Btn>
+              <Btn v="outline" size="sm" disabled={!!(folA && folA.status !== 'resolved')} onClick={() => act('follower')}>Someone is following me</Btn>
             </div>
           </div>
         </DemoPanel>
@@ -564,15 +563,15 @@ function WalkActive() {
       {finalScan && (
         <ScanOverlay subtitle={CP[next.cp].name} title={`Scanning ${r.finalScan}`} mode="face" duration={2200}
           steps={[`Reading ${r.finalScan}`, 'Face match 1:1', 'Closing your walk']}
-          onDone={() => { setFinalScan(false); mutate((d) => passNext(d, snapshotAt(next.cp))); }} />
+          onDone={() => { setFinalScan(false); act('passNext', snapshotAt(next.cp)); }} />
       )}
     </div>
   );
 }
 
 function AreYouOk() {
-  const { s, mutate, now } = useApp();
-  const w = s.walk;
+  const { s, act, now } = useApp();
+  const w = myWalk(s);
   const left = Math.max(0, Math.ceil((w.missing.until - now) / 1000));
   const next = nextStep(w);
   const g = guardById(s, w.guard);
@@ -584,18 +583,18 @@ function AreYouOk() {
       <h2 className="mt-6 font-display text-[40px] font-semibold">Are you OK?</h2>
       <p className="mt-2 text-white/80">You have not reached {CP[next.cp].name} ({cpShort(next.cp)}) on time.</p>
       <div className="mt-8 grid w-full max-w-[300px] gap-3">
-        <Btn v="success" size="lg" className="h-16 text-lg" icon="check" onClick={() => mutate(answerOk)}>I'm OK</Btn>
-        <Btn v="danger" size="lg" className="h-16 text-lg" icon="siren" onClick={() => mutate(sos)}>Help</Btn>
+        <Btn v="success" size="lg" className="h-16 text-lg" icon="check" onClick={() => act('answerOk')}>I'm OK</Btn>
+        <Btn v="danger" size="lg" className="h-16 text-lg" icon="siren" onClick={() => act('sos')}>Help</Btn>
       </div>
       <p className="mt-6 text-xs text-white/65">No answer? Guard {g.name} gets your last photo and location.</p>
-      <button type="button" className="mt-3 text-xs font-semibold text-accent underline" onClick={() => mutate((d) => { d.walk.missing.until = Date.now(); })}>Demo: skip timer</button>
+      <button type="button" className="mt-3 text-xs font-semibold text-accent underline" onClick={() => act('skipMissingTimer')}>Demo: skip timer</button>
     </div>
   );
 }
 
 function WalkArrived() {
-  const { s, mutate } = useApp();
-  const w = s.walk;
+  const { s, act } = useApp();
+  const w = myWalk(s);
   const mins = Math.max(1, Math.round((w.arrivedAt - w.startedAt) / MIN));
   return (
     <div className="pb-28">
@@ -624,7 +623,7 @@ function WalkArrived() {
             ))}
           </div>
         </Card>
-        <Btn className="w-full" onClick={() => mutate((d) => { d.walk = null; })}>Done</Btn>
+        <Btn className="w-full" onClick={() => act('closeWalk')}>Done</Btn>
       </div>
     </div>
   );
@@ -632,7 +631,7 @@ function WalkArrived() {
 
 // ---------------- Lab (LabLedger) ----------------
 function Lab() {
-  const { s, mutate, now } = useApp();
+  const { s, act, now } = useApp();
   const [stage, setStage] = useState(null); // scanShelf | shelf | weighing
   const [picks, setPicks] = useState({});
   const [ret, setRet] = useState(null); // { issue, phase: 'scan' | 'result', missing }
@@ -649,7 +648,7 @@ function Lab() {
   const checkDone = () => {
     const is = ret.issue;
     const missing = !ret.forceOk && !is.rfid && is.qty > 1 && s.returnCount % 2 === 0 ? 1 : 0;
-    if (!missing) mutate((d) => returnItem(d, is.id, 0));
+    if (!missing) act('returnItem', is.id, 0);
     setRet({ ...ret, phase: 'result', missing });
   };
   const item = (id) => s.inventory.find((x) => x.id === id);
@@ -763,7 +762,7 @@ function Lab() {
       {stage === 'weighing' && (
         <ScanOverlay subtitle="LabLedger" title="Counting your items" mode="weight" duration={2000}
           steps={['Weight sensor counting', 'Reading RFID tags', `Issuing to ${me.id}`]}
-          onDone={() => { mutate((d) => issueItems(d, picks)); setStage(null); }} />
+          onDone={() => { act('issueItems', picks); setStage(null); }} />
       )}
 
       {ret && ret.phase === 'scan' && (
@@ -778,7 +777,7 @@ function Lab() {
           onClose={() => setRet(null)}
           actions={<>
             <Btn className="w-full" icon="refresh" onClick={() => startReturn(ret.issue, true)}>Found it, check again</Btn>
-            <Btn v="outline" className="w-full" onClick={() => { mutate((d) => returnItem(d, ret.issue.id, 1)); setRet(null); }}>Return {ret.issue.qty - 1}, report 1 missing</Btn>
+            <Btn v="outline" className="w-full" onClick={() => { act('returnItem', ret.issue.id, 1); setRet(null); }}>Return {ret.issue.qty - 1}, report 1 missing</Btn>
           </>} />
       ) : (
         <ResultSheet ok title="All items present ✓" note={`${ret.issue.qty} × ${ret.issue.name} returned`}
@@ -792,7 +791,7 @@ function Lab() {
 }
 
 function DisputeSheet({ label, onClose }) {
-  const { mutate } = useApp();
+  const { act } = useApp();
   const [reason, setReason] = useState(null);
   const [text, setText] = useState('');
   return (
@@ -807,18 +806,18 @@ function DisputeSheet({ label, onClose }) {
       <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="Add details (optional)"
         className="mt-3 w-full rounded-2xl border-0 bg-slate-50 p-3 text-sm ring-1 ring-slate-200 focus:ring-2 focus:ring-brand" />
       <p className="mt-2 text-xs text-slate-500">Reviewed by the Lab In-charge and a student committee member within 3 days.</p>
-      <Btn className="mt-3 w-full" disabled={!reason} onClick={() => { mutate((d) => raiseDispute(d, label, reason + (text ? `: ${text}` : ''))); onClose(); }}>Send dispute</Btn>
+      <Btn className="mt-3 w-full" disabled={!reason} onClick={() => { act('raiseDispute', label, reason + (text ? `: ${text}` : '')); onClose(); }}>Send dispute</Btn>
     </Sheet>
   );
 }
 
 // ---------------- Profile & privacy ----------------
 export function GenderSwitch({ className }) {
-  const { s, mutate } = useApp();
+  const { s, act } = useApp();
   return (
     <div className={cls('flex rounded-full bg-white/5 p-1 ring-1 ring-line', className)} role="radiogroup" aria-label="Student">
       {['female', 'male'].map((g) => (
-        <button key={g} type="button" role="radio" aria-checked={s.gender === g} onClick={() => mutate((d) => setGender(d, g))}
+        <button key={g} type="button" role="radio" aria-checked={s.gender === g} onClick={() => act('setGender', g)}
           className={cls('flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition',
             s.gender === g ? (g === 'female' ? 'bg-[#f472b6] text-ink' : 'bg-[#3b82f6] text-ink') : 'text-slate-500 hover:text-slate-900')}>
           <span className={cls('h-2 w-2 rounded-full', g === 'female' ? 'bg-[#f472b6]' : 'bg-[#3b82f6]', s.gender === g && 'bg-ink')} />{GENDER[g].label} · {STUDENTS[g].first}
@@ -829,7 +828,7 @@ export function GenderSwitch({ className }) {
 }
 
 function Profile() {
-  const { s, reset } = useApp();
+  const { s, reset, mode, pairing, openPair } = useApp();
   const me = studentOf(s);
   const [page, setPage] = useState('main');
   if (page === 'data') return <MyData onBack={() => setPage('main')} />;
@@ -870,7 +869,8 @@ function Profile() {
             { ic: 'eye', t: 'My data and privacy', d: 'What is stored and for how long', go: () => setPage('data') },
             { ic: 'fingerprint', t: 'Face check at gates', d: 'Enrol on this phone for 1:1 checks', go: () => setPage('face') },
             { ic: 'flag', t: 'My disputes', d: myDisputes.length ? `${myDisputes.length} open` : 'None open', go: () => setPage('data') },
-            { ic: 'refresh', t: 'Clear all data', d: 'Erase everything recorded on this device', go: reset },
+            { ic: 'wifi', t: 'Campus hub', d: mode === 'hub' ? `Paired with ${pairing.hub || pairing.url}` : 'Not paired. Pair with the security laptop', go: openPair },
+            { ic: 'refresh', t: mode === 'hub' ? "Clear this phone's data" : 'Clear all data', d: mode === 'hub' ? 'Enrolled face and cached copy (campus data stays on the hub)' : 'Erase everything recorded on this device', go: reset },
           ].map((x) => (
             <button key={x.t} type="button" onClick={x.go} className="flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-slate-50">
               <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-50 text-brand"><Icon name={x.ic} className="h-4 w-4" /></span>
@@ -885,8 +885,8 @@ function Profile() {
 }
 
 function MyData({ onBack }) {
-  const { s, mutate } = useApp();
-  const w = s.walk;
+  const { s, act } = useApp();
+  const w = myWalk(s);
   const walkPhotos = w && w.phase === 'active' ? w.steps.filter((x) => x.status === 'passed').length : 0;
   const me = studentOf(s);
   const myLookups = s.audit.filter((a) => a.action.includes(me.id) || a.who.includes(me.id));
@@ -961,8 +961,8 @@ function MyData({ onBack }) {
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <Btn v="outline" size="sm" icon="download" onClick={() => mutate((d) => toast(d, 'student', 'Your data export will be emailed within 24 h', 'success'))}>Download my data</Btn>
-          <Btn v="outline" size="sm" icon="trash" onClick={() => mutate((d) => toast(d, 'student', 'Deletion request sent to the Data Officer', 'info'))}>Request deletion</Btn>
+          <Btn v="outline" size="sm" icon="download" onClick={() => act('notify', 'student', 'Your data export will be emailed within 24 h', 'success')}>Download my data</Btn>
+          <Btn v="outline" size="sm" icon="trash" onClick={() => act('notify', 'student', 'Deletion request sent to the Data Officer', 'info')}>Request deletion</Btn>
         </div>
       </div>
     </div>

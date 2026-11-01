@@ -1,21 +1,19 @@
 // Guard app: live alert feed, campus map, active Saathi Walks, demo triggers.
 import { useState } from 'react';
 import { ALERT_TYPES, CP, ESCALATE_MS, PRI, ROUTES, cls, cpShort, distM, fmtTime, mmss, ago } from './data.js';
-import {
-  acceptAlert, audit, equipmentLeaving, guardById, lastPassed, nextStep, playSpeaker, resolveAlert,
-  skipTime, toggleLights, TRIGGERS, useApp, visitorWrongZone,
-} from './store.js';
+import { guardById, lastPassed, nextStep } from './store.js';
+import { useApp } from './ctx.js';
+import { SyncChip } from './pair.jsx';
 import CampusMap from './map.jsx';
 import { CAMERAS } from './campus.js';
 import { CamTile, CameraViewer, camStatus } from './cctv.jsx';
 import { AiExplain, CamConnect } from './vision/ui.jsx';
-import { isLive } from './vision/live.js';
 import { Avatar, Badge, BottomNav, Btn, Card, CheckpointPhoto, DemoPanel, Icon, LiveDot, SectionTitle, Toggle } from './ui.jsx';
 
 const byPriority = (a, b) => PRI[ALERT_TYPES[a.type].pri].rank - PRI[ALERT_TYPES[b.type].pri].rank || b.time - a.time;
 
 export default function GuardApp() {
-  const { s } = useApp();
+  const { s, openPair } = useApp();
   const [tab, setTab] = useState('alerts');
   const [me, setMe] = useState('ramesh');
   const [cam, setCam] = useState(null);
@@ -32,7 +30,7 @@ export default function GuardApp() {
             <div className="text-lg font-bold">On duty · {g.name}</div>
             <div className="text-xs text-white/65">Post: {g.post} · Radio channel 4</div>
           </div>
-          <Badge className="bg-white/10 text-white"><LiveDot />Live</Badge>
+          <SyncChip onClick={openPair} />
         </div>
         <div className="mt-2 flex gap-1.5" role="tablist" aria-label="Switch guard">
           {s.guards.map((x) => (
@@ -99,7 +97,7 @@ function AlertFeed({ me, openCam }) {
 }
 
 export function AlertCard({ a, me, compact, openCam }) {
-  const { s, mutate, now } = useApp();
+  const { s, act, now } = useApp();
   const T = ALERT_TYPES[a.type];
   const P = PRI[T.pri];
   const cp = CP[a.cp];
@@ -108,8 +106,8 @@ export function AlertCard({ a, me, compact, openCam }) {
   const acc = a.acceptedBy && guardById(s, a.acceptedBy);
   const resolved = a.status === 'resolved';
   const left = Math.max(0, Math.ceil((ESCALATE_MS - (now - a.time)) / 1000));
-  const act = (fn) => mutate((d) => fn(d, a.id, me));
-  const logView = (what) => mutate((d) => audit(d, `Guard ${meG.name}`, `${what} · ${cp.name}`, `Responding to alert ${a.id}`));
+  const run = (name) => act(name, a.id, me);
+  const logView = (what) => act('guardLog', meG.name, what, cp.name, a.id);
 
   return (
     <Card className={cls('fade-up overflow-hidden p-0', a.status === 'new' && !resolved && (T.pri === 'medium' ? 'ring-2 ring-amber-300' : 'ring-2 ring-red-300'), resolved && 'opacity-80')}>
@@ -185,11 +183,11 @@ export function AlertCard({ a, me, compact, openCam }) {
         {!resolved && (
           <div className="mt-3 grid grid-cols-2 gap-2">
             {a.status === 'new' ? (
-              <Btn size="sm" className="col-span-2" icon="nav" onClick={() => act(acceptAlert)}>Accept and navigate</Btn>
+              <Btn size="sm" className="col-span-2" icon="nav" onClick={() => run('acceptAlert')}>Accept and navigate</Btn>
             ) : null}
-            <Btn size="sm" v={a.lights ? 'accent' : 'outline'} icon="bulb" onClick={() => act(toggleLights)}>{a.lights ? 'Lights on' : 'Turn on area lights'}</Btn>
-            <Btn size="sm" v="outline" icon="speaker" onClick={() => act(playSpeaker)}>Play speaker warning</Btn>
-            <Btn size="sm" v="success" className="col-span-2" icon="check" onClick={() => act(resolveAlert)}>Resolve</Btn>
+            <Btn size="sm" v={a.lights ? 'accent' : 'outline'} icon="bulb" onClick={() => run('toggleLights')}>{a.lights ? 'Lights on' : 'Turn on area lights'}</Btn>
+            <Btn size="sm" v="outline" icon="speaker" onClick={() => run('playSpeaker')}>Play speaker warning</Btn>
+            <Btn size="sm" v="success" className="col-span-2" icon="check" onClick={() => run('resolveAlert')}>Resolve</Btn>
           </div>
         )}
       </div>
@@ -256,8 +254,9 @@ function CamerasTab({ openCam }) {
   const alertCams = new Set(s.alerts.filter((a) => a.status !== 'resolved' && a.cam).map((a) => a.cam));
   const zones = [['all', 'All'], ['live', 'Live'], ['alert', 'With alerts'], ['GATE', 'Gate'], ['paths', 'Paths'], ['hostels', 'Hostels'], ['WALL', 'Wall']];
   const ZONE = { paths: ['A', 'B', 'C', 'F', 'K'], hostels: ['D', 'E'] };
-  const list = CAMERAS.filter((c) => zone === 'all' || (zone === 'live' ? isLive(c.id) : zone === 'alert' ? alertCams.has(c.id) : ZONE[zone] ? ZONE[zone].includes(c.cp) : c.cp === zone))
-    .sort((a, b) => Number(isLive(b.id)) - Number(isLive(a.id)) || Number(alertCams.has(b.id)) - Number(alertCams.has(a.id)));
+  const on = (id) => camStatus(s, id) === 'online';
+  const list = CAMERAS.filter((c) => zone === 'all' || (zone === 'live' ? on(c.id) : zone === 'alert' ? alertCams.has(c.id) : ZONE[zone] ? ZONE[zone].includes(c.cp) : c.cp === zone))
+    .sort((a, b) => Number(on(b.id)) - Number(on(a.id)) || Number(alertCams.has(b.id)) - Number(alertCams.has(a.id)));
   return (
     <div className="space-y-3 p-4 pb-8">
       <CamConnect />
@@ -339,29 +338,29 @@ function WalkRow({ w, now }) {
 }
 
 function DemoTab() {
-  const { s, mutate } = useApp();
+  const { s, act } = useApp();
   const osc = s.inventory.find((i) => i.id === 'osc4');
   const triggers = [
-    { k: 'wall', icon: 'fence', t: 'Wall crossing', d: 'Boundary Wall East', run: TRIGGERS.wall },
-    { k: 'tailgate', icon: 'tailgate', t: 'Tailgating at gate', d: 'Main Gate, Lane 2', run: TRIGGERS.tailgate },
-    { k: 'tamper', icon: 'cameraOff', t: 'Camera tampered', d: 'CAM-K2, Canteen', run: TRIGGERS.tamper },
-    { k: 'lab', icon: 'cpu', t: 'Oscilloscope leaving lab', d: osc.holder ? `Issued to ${osc.holder}` : 'Not issued: lab + gate', run: (d) => equipmentLeaving(d, 'osc4') },
-    { k: 'visitor', icon: 'badge', t: 'Visitor in wrong zone', d: 'Seen near Girls Hostel', run: visitorWrongZone },
-    { k: 'camoffline', icon: 'video', t: 'Camera goes offline', d: 'CAM-W2, east wall', run: TRIGGERS.camoffline },
+    { k: 'wall', icon: 'fence', t: 'Wall crossing', d: 'Boundary Wall East', run: () => act('trigger', 'wall') },
+    { k: 'tailgate', icon: 'tailgate', t: 'Tailgating at gate', d: 'Main Gate, Lane 2', run: () => act('trigger', 'tailgate') },
+    { k: 'tamper', icon: 'cameraOff', t: 'Camera tampered', d: 'CAM-K2, Canteen', run: () => act('trigger', 'tamper') },
+    { k: 'lab', icon: 'cpu', t: 'Oscilloscope leaving lab', d: osc.holder ? `Issued to ${osc.holder}` : 'Not issued: lab + gate', run: () => act('equipmentLeaving', 'osc4') },
+    { k: 'visitor', icon: 'badge', t: 'Visitor in wrong zone', d: 'Seen near Girls Hostel', run: () => act('visitorWrongZone') },
+    { k: 'camoffline', icon: 'video', t: 'Camera goes offline', d: 'CAM-W2, east wall', run: () => act('trigger', 'camoffline') },
   ];
   return (
     <div className="space-y-3 p-4 pb-8">
       <DemoPanel title="Demo triggers: create sample alerts">
         <div className="grid grid-cols-2 gap-2">
           {triggers.map((x) => (
-            <button key={x.k} type="button" onClick={() => mutate(x.run)}
+            <button key={x.k} type="button" onClick={x.run}
               className="flex flex-col items-start gap-2 rounded-2xl bg-card p-3 text-left shadow-sm ring-1 ring-slate-200 transition hover:ring-brand active:scale-[.98]">
               <span className="grid h-9 w-9 place-items-center rounded-xl bg-red-50 text-red-600"><Icon name={x.icon} className="h-5 w-5" /></span>
               <span className="text-sm font-semibold leading-tight text-slate-900">{x.t}</span>
               <span className="text-[11px] text-slate-500">{x.d}</span>
             </button>
           ))}
-          <button type="button" onClick={() => mutate((d) => skipTime(d))}
+          <button type="button" onClick={() => act('skipTime')}
             className="flex flex-col items-start gap-2 rounded-2xl bg-amber-50 p-3 text-left ring-1 ring-amber-200 transition active:scale-[.98]">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-amber-100 text-amber-700"><Icon name="forward" className="h-5 w-5" /></span>
             <span className="text-sm font-semibold leading-tight text-slate-900">Skip 2 minutes</span>

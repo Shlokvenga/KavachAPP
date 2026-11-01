@@ -2,16 +2,18 @@
   "name": "kavach-prototype",
   "version": "1.0.0",
   "private": true,
-  "description": "Kavach: smart campus safety app for KLE Technological University, Hubballi (Android + web prototype, mock data)",
+  "description": "Kavach: campus safety for KLE Technological University, Hubballi. Phone edition (Android: Student + Guard) and laptop edition (Admin console + campus hub).",
   "scripts": {
     "build": "node build.mjs",
     "watch": "node build.mjs --watch",
+    "start": "node build.mjs && node dist/kavach-laptop/hub.mjs --open",
+    "hub": "node dist/kavach-laptop/hub.mjs",
     "android:sync": "npm run build && npx cap sync android",
     "android:open": "npx cap open android",
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
     "serve": "node build.mjs && node serve.mjs",
     "serve:only": "node serve.mjs",
-    "test": "node test/rules.test.mjs && node test/qr.test.mjs"
+    "test": "node test/rules.test.mjs && node test/qr.test.mjs && node test/hub.test.mjs"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.4.4",

@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CAMERAS, CAMPUS_SHORT } from './campus.js';
 import { ALERT_TYPES, CP, camById, campusStats, cls, fmtTime, heatFrom } from './data.js';
-import { isLive } from './vision/live.js';
-import { useApp } from './store.js';
+import { useApp } from './ctx.js';
 import CampusMap from './map.jsx';
 import { CAM_STATUS, CamTile, CameraFeed, CameraViewer, camStatus } from './cctv.jsx';
 import { Badge, Btn, Icon, LiveDot, Logo } from './ui.jsx';
@@ -106,7 +105,7 @@ export function CommandCentre({ onClose }) {
   const api = useRef(null);
   const open = s.alerts.filter((a) => a.status !== 'resolved');
   const alertCams = [...new Set(open.map((a) => a.cam).filter(Boolean))];
-  const liveIds = CAMERAS.map((c) => c.id).filter((id) => isLive(id));
+  const liveIds = CAMERAS.map((c) => c.id).filter((id) => camStatus(s, id) === 'online');
   const wall = [...new Set([...liveIds, ...alertCams, ...CAMERAS.map((c) => c.id)])].slice(0, 6);
   const counts = { online: 0, offline: 0, tampered: 0 };
   for (const c of CAMERAS) counts[camStatus(s, c.id)] = (counts[camStatus(s, c.id)] || 0) + 1;

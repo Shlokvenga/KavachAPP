@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { CAMERAS } from '../campus.js';
 import { cls, fmtTime, presence, studentOf } from '../data.js';
-import { gateFaceResult, useApp, toast } from '../store.js';
+import { useApp } from '../ctx.js';
 import { Badge, Btn, Card, Icon, Sheet } from '../ui.jsx';
 import { MODELS, aiSupported, loadVision, subscribeVision, vision, visionVersion } from './engine.js';
 import { THRESHOLDS, deleteTemplate, enrol, loadTemplate, verify } from './face.js';
@@ -56,7 +56,7 @@ export function CamConnect() {
     return (
       <Card className="flex items-start gap-3 bg-amber-50 ring-amber-200">
         <Icon name="info" className="mt-0.5 h-5 w-5 text-amber-700" />
-        <p className="text-sm text-amber-900">Real cameras and on-device AI need the Android app or a local server. Run <span className="font-mono">npm run serve</span> and open <span className="font-mono">http://localhost:8080</span>.</p>
+        <p className="text-sm text-amber-900">Real cameras and on-device AI need the Android app, or the laptop console opened from the Kavach hub (<span className="font-mono">http://localhost:8787</span>).</p>
       </Card>
     );
   }
@@ -192,7 +192,7 @@ function useSelfCam(active) {
 
 export function FaceEnrolPage({ onBack }) {
   useVision();
-  const { s, mutate } = useApp();
+  const { s, act } = useApp();
   const me = studentOf(s);
   const [tpl, setTpl] = useState(() => loadTemplate(me.id));
   const [cam, setCam] = useState(false);
@@ -204,7 +204,7 @@ export function FaceEnrolPage({ onBack }) {
     try {
       const r = await enrol(video.current, me.id, (i) => setBusy(`Reading your face ${i}/4…`));
       setRes(r);
-      if (r.ok) { setTpl(r.template); setCam(false); mutate((d) => toast(d, 'student', 'Face enrolled on this phone for 1:1 gate checks', 'success')); }
+      if (r.ok) { setTpl(r.template); setCam(false); act('notify', 'student', 'Face enrolled on this phone for 1:1 gate checks', 'success'); }
     } catch (e) { setRes({ ok: false, problems: [e.message] }); }
     setBusy(null);
   };
@@ -253,7 +253,7 @@ export function FaceEnrolPage({ onBack }) {
 // Real gate check with this phone's camera: 1:1 face match + anti-spoof + liveness.
 export function GateCheckSheet({ onClose }) {
   useVision();
-  const { s, mutate } = useApp();
+  const { s, act } = useApp();
   const me = studentOf(s);
   const stateDir = useRef(presence(s, me.id));
   stateDir.current = presence(s, me.id);
@@ -265,7 +265,7 @@ export function GateCheckSheet({ onClose }) {
     try {
       const r = await verify(video.current, me.id, (i) => setBusy(`Frame ${i}/3…`));
       const dir = r.ok ? (stateDir.current === 'IN' ? 'OUT' : 'IN') : null;
-      mutate((d) => { gateFaceResult(d, r); toast(d, 'guard', r.ok ? `Gate face check: ${me.name} matched 1:1 (${(r.sim * 100).toFixed(0)}%)` : r.decision === 'MANUAL CHECK' ? `Gate: ${me.name} needs a manual ID check (${(r.sim * 100).toFixed(0)}%)` : `Gate face check rejected: ${r.reasons[0]}`, r.ok ? 'success' : 'alert'); });
+      act('gateFace', r);
       setRes({ ...r, dir });
     } catch (e) { setRes({ ok: false, decision: 'ERROR', reasons: [e.message] }); }
     setBusy(null);

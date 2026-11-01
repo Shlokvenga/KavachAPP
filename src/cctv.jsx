@@ -4,7 +4,8 @@
 // anonymised (see vision/live.js).
 import { useEffect, useRef, useState } from 'react';
 import { ALERT_TYPES, CP, camById, cls, fmtTime } from './data.js';
-import { camPtz, flagIncident, guardById, requestUnblur, snapshot, talkDown, useApp, viewFeed } from './store.js';
+import { guardById } from './store.js';
+import { useApp } from './ctx.js';
 import { Badge, Btn, Icon } from './ui.jsx';
 import { isLive } from './vision/live.js';
 import { LiveView, useVision } from './vision/ui.jsx';
@@ -16,12 +17,20 @@ export const CAM_STATUS = {
   tampered: { label: 'Tampered', badge: 'bg-amber-500 text-ink', dot: 'bg-amber-500' },
 };
 
+// Another paired device (e.g. the security laptop) that has this camera connected.
+// Its video stays on that device; only alerts and anonymised snapshots are shared.
+export function remoteHost(s, camId) {
+  if (isLive(camId)) return null;
+  const devs = (s.net && s.net.devices) || [];
+  return devs.find((d) => d.online && d.live.includes(camId)) || null;
+}
+
 // What a camera is right now: a recorded fault wins, then "live" if a real
-// camera is connected on this device, otherwise "not connected".
+// camera is connected on this device or on a paired one, otherwise "not connected".
 export function camStatus(s, camId) {
   const st = s.cams[camId] && s.cams[camId].status;
   if (st === 'tampered' || st === 'offline') return st;
-  return isLive(camId) ? 'online' : 'none';
+  return isLive(camId) || remoteHost(s, camId) ? 'online' : 'none';
 }
 
 export function CameraFeed({ camId, className, showMeta = true }) {
@@ -39,13 +48,28 @@ export function CameraFeed({ camId, className, showMeta = true }) {
       </div>
     );
   }
+  const host = st === 'online' && remoteHost(s, camId);
+  if (host) {
+    const last = s.alerts.find((a) => a.cam === camId && a.snap);
+    return (
+      <div className={cls('relative grid aspect-video w-full place-items-center overflow-hidden rounded-xl bg-black text-center', className)}>
+        {last && <img src={last.snap} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />}
+        <div className="relative px-2">
+          <Icon name="video" className="mx-auto h-5 w-5 text-brand" />
+          <div className="mt-1 font-mono text-[10px] font-bold tracking-widest text-brand">LIVE ON {host.name.toUpperCase()}</div>
+          {showMeta && <div className="mt-0.5 text-[9px] text-slate-400">AI runs there. Video stays on that device.{last ? ' Last alert frame shown.' : ''}</div>}
+        </div>
+        {showMeta && <div className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[9px] font-bold text-brand"><span className="h-1.5 w-1.5 rounded-full bg-red-500 blink" />{camId}</div>}
+      </div>
+    );
+  }
   const msg = { none: ['cameraOff', 'NOT CONNECTED', 'text-slate-400'], offline: ['cameraOff', 'NO SIGNAL', 'text-slate-300'], tampered: ['alert', 'VIEW BLOCKED', 'text-amber-300'] }[st];
   return (
     <div className={cls('relative grid aspect-video w-full place-items-center overflow-hidden rounded-xl bg-[repeating-linear-gradient(135deg,#070d12_0,#070d12_6px,#0a1218_6px,#0a1218_12px)] text-center', className)}>
       <div className="px-2">
         <Icon name={msg[0]} className={cls('mx-auto h-5 w-5', msg[2])} />
         <div className={cls('mt-1 font-mono text-[10px] font-bold tracking-widest', msg[2])}>{msg[1]}</div>
-        {st === 'none' && showMeta && <div className="mt-0.5 text-[9px] text-slate-500">Connect a camera in Guard → Cameras</div>}
+        {st === 'none' && showMeta && <div className="mt-0.5 text-[9px] text-slate-500">Connect a camera on the laptop or in Guard → Cameras</div>}
       </div>
       {showMeta && <div className="absolute left-1.5 top-1.5 rounded bg-black/55 px-1.5 py-0.5 font-mono text-[9px] text-white">{camId}</div>}
     </div>
@@ -64,7 +88,7 @@ export function CamTile({ camId, onOpen, highlight }) {
       <div className="flex items-center gap-1.5 px-2.5 py-2">
         <span className={cls('h-2 w-2 shrink-0 rounded-full', CAM_STATUS[st].dot)} />
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-800">{cam.name}</span>
-        {isLive(camId) && <span className="rounded bg-brand px-1 font-mono text-[9px] font-bold text-ink">AI</span>}
+        {(isLive(camId) || remoteHost(s, camId)) && <span className="rounded bg-brand px-1 font-mono text-[9px] font-bold text-ink">AI</span>}
         {open > 0 && <span className="grid h-4 min-w-4 place-items-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">{open}</span>}
       </div>
     </button>
@@ -74,7 +98,7 @@ export function CamTile({ camId, onOpen, highlight }) {
 const UNBLUR_REASONS = ['Police complaint', 'Theft investigation', 'Student safety incident', 'Ragging complaint'];
 
 export function CameraViewer({ camId, onClose, who, guardId }) {
-  const { s, mutate } = useApp();
+  const { s, act } = useApp();
   const [unblur, setUnblur] = useState(false);
   const logged = useRef(false);
   const cam = camById(camId);
@@ -85,8 +109,8 @@ export function CameraViewer({ camId, onClose, who, guardId }) {
   useEffect(() => {
     if (logged.current) return;
     logged.current = true;
-    mutate((d) => viewFeed(d, camId, who));
-  }, [camId, who, mutate]);
+    act('viewFeed', camId, who);
+  }, [camId, who, act]);
   const g = guardId ? guardById(s, guardId) : null;
 
   return (
@@ -109,13 +133,13 @@ export function CameraViewer({ camId, onClose, who, guardId }) {
         <div className="mt-4 grid grid-cols-[auto_1fr] items-center gap-4 rounded-2xl bg-white/5 p-3 ring-1 ring-white/10">
           <div className="grid grid-cols-3 gap-1">
             <span />
-            <button type="button" aria-label="Zoom in" onClick={() => mutate((d) => camPtz(d, camId, { zoom: 0.5 }))} className="grid h-10 w-10 place-items-center rounded-xl bg-white/10 active:bg-white/20"><Icon name="plus" className="h-4 w-4" /></button>
+            <button type="button" aria-label="Zoom in" onClick={() => act('camPtz', camId, { zoom: 0.5 })} className="grid h-10 w-10 place-items-center rounded-xl bg-white/10 active:bg-white/20"><Icon name="plus" className="h-4 w-4" /></button>
             <span />
-            <button type="button" aria-label="Pan left" disabled={!ptz} onClick={() => mutate((d) => camPtz(d, camId, { pan: -10 }))} className="grid h-10 w-10 place-items-center rounded-xl bg-white/10 active:bg-white/20 disabled:opacity-30"><Icon name="chevL" className="h-4 w-4" /></button>
-            <button type="button" aria-label="Reset view" onClick={() => mutate((d) => camPtz(d, camId, { reset: true }))} className="grid h-10 w-10 place-items-center rounded-xl bg-white/10 text-[10px] font-bold active:bg-white/20">1×</button>
-            <button type="button" aria-label="Pan right" disabled={!ptz} onClick={() => mutate((d) => camPtz(d, camId, { pan: 10 }))} className="grid h-10 w-10 place-items-center rounded-xl bg-white/10 active:bg-white/20 disabled:opacity-30"><Icon name="chevR" className="h-4 w-4" /></button>
+            <button type="button" aria-label="Pan left" disabled={!ptz} onClick={() => act('camPtz', camId, { pan: -10 })} className="grid h-10 w-10 place-items-center rounded-xl bg-white/10 active:bg-white/20 disabled:opacity-30"><Icon name="chevL" className="h-4 w-4" /></button>
+            <button type="button" aria-label="Reset view" onClick={() => act('camPtz', camId, { reset: true })} className="grid h-10 w-10 place-items-center rounded-xl bg-white/10 text-[10px] font-bold active:bg-white/20">1×</button>
+            <button type="button" aria-label="Pan right" disabled={!ptz} onClick={() => act('camPtz', camId, { pan: 10 })} className="grid h-10 w-10 place-items-center rounded-xl bg-white/10 active:bg-white/20 disabled:opacity-30"><Icon name="chevR" className="h-4 w-4" /></button>
             <span />
-            <button type="button" aria-label="Zoom out" onClick={() => mutate((d) => camPtz(d, camId, { zoom: -0.5 }))} className="grid h-10 w-10 place-items-center rounded-xl bg-white/10 active:bg-white/20"><Icon name="minus" className="h-4 w-4" /></button>
+            <button type="button" aria-label="Zoom out" onClick={() => act('camPtz', camId, { zoom: -0.5 })} className="grid h-10 w-10 place-items-center rounded-xl bg-white/10 active:bg-white/20"><Icon name="minus" className="h-4 w-4" /></button>
             <span />
           </div>
           <div className="text-xs text-white/70">
@@ -126,9 +150,9 @@ export function CameraViewer({ camId, onClose, who, guardId }) {
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <Btn v="dark" size="sm" icon="speaker" onClick={() => mutate((d) => talkDown(d, camId))}>Talk-down speaker</Btn>
-          <Btn v="dark" size="sm" icon="camera" disabled={!live} onClick={() => mutate((d) => snapshot(d, camId, who))}>Snapshot</Btn>
-          {g && <Btn v="danger" size="sm" icon="flag" onClick={() => { mutate((d) => flagIncident(d, camId, guardId)); onClose(); }}>Flag incident</Btn>}
+          <Btn v="dark" size="sm" icon="speaker" onClick={() => act('talkDown', camId)}>Talk-down speaker</Btn>
+          <Btn v="dark" size="sm" icon="camera" disabled={!live} onClick={() => act('snapshot', camId, who)}>Snapshot</Btn>
+          {g && <Btn v="danger" size="sm" icon="flag" onClick={() => { act('flagIncident', camId, guardId); onClose(); }}>Flag incident</Btn>}
           <Btn v="dark" size="sm" icon="eye" className={g ? '' : 'col-span-2'} onClick={() => setUnblur(!unblur)}>Request unblur</Btn>
         </div>
         {unblur && (
@@ -137,7 +161,7 @@ export function CameraViewer({ camId, onClose, who, guardId }) {
             <p className="text-xs text-white/60">The student committee reviews every request. Nothing is unblurred until they approve.</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {UNBLUR_REASONS.map((r) => (
-                <button key={r} type="button" onClick={() => { mutate((d) => requestUnblur(d, camId, who, r)); setUnblur(false); }}
+                <button key={r} type="button" onClick={() => { act('requestUnblur', camId, who, r); setUnblur(false); }}
                   className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium hover:bg-white/20">{r}</button>
               ))}
             </div>

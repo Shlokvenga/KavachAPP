@@ -5,7 +5,7 @@
   "backgroundColor": "#05090d",
   "android": {
     "backgroundColor": "#05090d",
-    "allowMixedContent": false,
+    "allowMixedContent": true,
     "webContentsDebuggingEnabled": true
   }
 }

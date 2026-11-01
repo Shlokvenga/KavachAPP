@@ -1,4 +1,4 @@
-name: Android APK
+name: Build phone and laptop editions
 
 on:
   push:
@@ -24,11 +24,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Test behaviour rules and gate passes
+      - name: Test behaviour rules, gate passes and the hub
         run: npm test
 
-      - name: Build web app into www/
+      - name: Build phone edition (www/) and laptop edition (dist/kavach-laptop/)
         run: npm run build
+
+      - name: Package the laptop edition
+        run: |
+          cd dist
+          zip -qr -X kavach-laptop.zip kavach-laptop
+          ls -lh kavach-laptop.zip
+
+      - name: Upload laptop edition
+        uses: actions/upload-artifact@v4
+        with:
+          name: kavach-laptop
+          path: dist/kavach-laptop.zip
+          if-no-files-found: error
 
       - name: Copy web app into the Android project
         run: npx cap sync android

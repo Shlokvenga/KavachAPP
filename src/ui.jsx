@@ -1,8 +1,8 @@
 // Shared UI building blocks.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import qrcode from 'qrcode-generator';
-import { CP, cls, pad } from './data.js';
-import { useApp } from './store.js';
+import { CP, cls, pad, studentOf } from './data.js';
+import { useApp } from './ctx.js';
 
 const ICONS = {
   home: '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>',
@@ -66,6 +66,10 @@ const ICONS = {
   printer: '<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/>',
   heart: '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>',
   link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  wifi: '<path d="M5 12.55a11 11 0 0 1 14 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><path d="M12 20h.01"/>',
+  laptop: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
 };
 
@@ -142,11 +146,13 @@ export function Stepper({ value, onChange, max = 99 }) {
   );
 }
 
+// A bottom sheet on phones; a centred dialog on the laptop console.
 export function Sheet({ onClose, title, children, tall }) {
+  const { desk } = useApp() || {};
   return (
-    <div className="absolute inset-0 z-40 flex flex-col justify-end">
+    <div className={cls('absolute inset-0 z-40 flex flex-col', desk ? 'items-center justify-center p-6' : 'justify-end')}>
       <div className="fade-in absolute inset-0 bg-ink/50" onClick={onClose} />
-      <div className={cls('sheet relative flex flex-col rounded-t-[28px] bg-card shadow-2xl', tall ? 'max-h-[92%]' : 'max-h-[85%]')}>
+      <div className={cls('sheet relative flex flex-col bg-card shadow-2xl', desk ? 'w-full max-w-lg rounded-[28px] ring-1 ring-line' : 'rounded-t-[28px]', tall ? 'max-h-[92%]' : 'max-h-[85%]')}>
         <div className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-slate-300" />
         {title && (
           <div className="flex shrink-0 items-center justify-between px-5 pb-1 pt-3">
@@ -344,10 +350,14 @@ const TOAST_STYLE = {
 const ROLE_LABEL = { student: 'Student app', guard: 'Guard app', admin: 'Admin' };
 
 // In single-phone mode, toasts for other roles show as a "push notification" you can tap to jump there.
+// Student toasts are addressed to one student (several phones can be paired).
+// Other roles' toasts only show on a stand-alone device that has that role.
 export function Toasts({ role }) {
-  const { s, split, setRole } = useApp();
-  const own = s.toasts.filter((t) => t.role === role).slice(-2);
-  const other = split ? [] : s.toasts.filter((t) => t.role !== role && t.role !== 'all').slice(-1);
+  const { s, split, setRole, roles = ['student', 'guard', 'admin'], mode } = useApp();
+  const me = studentOf(s).id;
+  const forMe = (t) => t.role !== 'student' || !t.sid || t.sid === me;
+  const own = s.toasts.filter((t) => t.role === role && forMe(t)).slice(-2);
+  const other = split || mode === 'hub' ? [] : s.toasts.filter((t) => t.role !== role && roles.includes(t.role) && forMe(t)).slice(-1);
   const list = [...other, ...own];
   if (!list.length) return null;
   return (

@@ -1,53 +1,14 @@
-// Admin dashboard: overview, visitor passes, lab inventory, alert heatmap, audit log.
+// Admin pages for the laptop console (src/laptop.jsx): overview panels, visitor
+// passes, lab inventory, alert heatmap, audit log. Phones never load these.
 import { useRef, useState } from 'react';
-import { ALERT_TYPES, COLLEGE, CP, PRI, QR_PERIOD, VISITOR_PURPOSES, VISITOR_ZONES, campusStats, cls, fmtDay, fmtTime, heatFrom, pad, qrCode, studentById, transparency, ago } from './data.js';
-import { audit, equipmentLeaving, toast, useApp, visitorWrongZone } from './store.js';
+import { ALERT_TYPES, CP, PRI, QR_PERIOD, VISITOR_PURPOSES, VISITOR_ZONES, campusStats, cls, fmtDay, fmtTime, heatFrom, pad, qrCode, studentById, transparency, ago } from './data.js';
+import { useApp } from './ctx.js';
 import { CAMERAS } from './campus.js';
-import { CAM_STATUS, CameraFeed, CameraViewer, camStatus } from './cctv.jsx';
-import { CommandCentre, LayerChips, Twin, twinData } from './twinview.jsx';
-import { AiAdminCard } from './vision/ui.jsx';
-import { Badge, BottomNav, Btn, Card, DemoPanel, Icon, LiveDot, QR, Ring, SectionTitle, Sheet, useFastNow } from './ui.jsx';
+import { CAM_STATUS, CameraFeed, camStatus } from './cctv.jsx';
+import { LayerChips, Twin, twinData } from './twinview.jsx';
+import { Badge, Btn, Card, DemoPanel, Icon, LiveDot, QR, Ring, SectionTitle, Sheet, useFastNow } from './ui.jsx';
 
-export default function AdminApp() {
-  const { s } = useApp();
-  const [tab, setTab] = useState('overview');
-  const [cam, setCam] = useState(null);
-  const [cc, setCc] = useState(false);
-  const open = s.alerts.filter((a) => a.status !== 'resolved').length;
-  const low = s.inventory.filter((i) => i.kind === 'consumable' && i.stock < i.min).length;
-  return (
-    <>
-      <div className="shrink-0 border-b border-line bg-[#060c11] px-4 pb-3 pt-3 text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-xs font-medium text-white/65">{COLLEGE}</div>
-            <div className="font-display text-xl font-semibold">Admin dashboard</div>
-          </div>
-          <Badge className="bg-white/10 text-white"><LiveDot />Live</Badge>
-        </div>
-      </div>
-      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto" key={tab}>
-        {tab === 'overview' && <Overview go={setTab} openCam={setCam} openCc={() => setCc(true)} />}
-        {tab === 'twin' && !cc && <TwinTab openCam={setCam} openCc={() => setCc(true)} />}
-        {tab === 'twin' && cc && <div className="p-6 text-center text-sm text-slate-500">Command centre is open.</div>}
-        {tab === 'visitors' && <Visitors />}
-        {tab === 'stock' && <Inventory />}
-        {tab === 'audit' && <Audit />}
-      </div>
-      {cam && <CameraViewer key={cam} camId={cam} onClose={() => setCam(null)} who="Admin (Ms. Kulkarni)" />}
-      {cc && <CommandCentre onClose={() => setCc(false)} />}
-      <BottomNav value={tab} onChange={setTab} items={[
-        { id: 'overview', label: 'Overview', icon: 'chart', badge: open },
-        { id: 'twin', label: 'Twin', icon: 'map' },
-        { id: 'visitors', label: 'Visitors', icon: 'badge' },
-        { id: 'stock', label: 'Lab stock', icon: 'box', badge: low },
-        { id: 'audit', label: 'Audit', icon: 'eye' },
-      ]} />
-    </>
-  );
-}
-
-function Stat({ icon, label, value, tone = 'brand', sub, onClick }) {
+export function Stat({ icon, label, value, tone = 'brand', sub, onClick }) {
   const tones = { brand: 'bg-brand-100 text-brand', red: 'bg-red-100 text-red-600', amber: 'bg-amber-100 text-amber-700', green: 'bg-emerald-100 text-emerald-700', violet: 'bg-violet-100 text-violet-700' };
   return (
     <button type="button" onClick={onClick} className="rounded-2xl bg-card p-3.5 text-left shadow-sm ring-1 ring-slate-200/70 transition hover:shadow-md">
@@ -59,114 +20,132 @@ function Stat({ icon, label, value, tone = 'brand', sub, onClick }) {
   );
 }
 
-function Overview({ go, openCam, openCc }) {
-  const { s, mutate, now } = useApp();
+export function GettingStarted({ go }) {
+  const { s } = useApp();
+  const online = CAMERAS.filter((c) => camStatus(s, c.id) === 'online').length;
+  const phones = ((s.net && s.net.devices) || []).filter((d) => d.kind !== 'laptop').length;
+  if (s.alerts.length || s.gate.log.length || s.visitors.length || (online && phones)) return null;
+  const steps = [
+    [online > 0, 'Connect cameras', 'Plug in USB webcams and assign each to a campus camera. AI runs on this laptop.', 'cams'],
+    [phones > 0, 'Pair guard and student phones', 'Scan the pairing QR from the Kavach app on each phone.', 'setup'],
+    [s.visitors.length > 0, 'Register expected visitors', 'Visitor passes with allowed zones and times.', 'visitors'],
+  ];
+  return (
+    <Card className="ring-brand/30">
+      <div className="flex items-center justify-between">
+        <div className="font-display text-sm font-bold uppercase tracking-wider text-slate-900">Getting started</div>
+        <span className="text-xs text-slate-500">Everything here is counted from real activity</span>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        {steps.map(([done, t, d, page], i) => (
+          <button key={t} type="button" onClick={() => go(page)} className="flex items-start gap-3 rounded-2xl bg-raise p-3 text-left ring-1 ring-line hover:ring-brand/50">
+            <span className={cls('grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold', done ? 'bg-emerald-500 text-ink' : 'bg-brand text-ink')}>{done ? <Icon name="check" className="h-4 w-4" /> : i + 1}</span>
+            <span><span className="block text-sm font-semibold text-slate-900">{t}</span><span className="block text-xs text-slate-500">{d}</span></span>
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+export function StatGrid({ go, className }) {
+  const { s, now } = useApp();
+  const st = campusStats(s, now);
+  return (
+    <div className={cls('grid grid-cols-2 gap-3', className)}>
+      <Stat icon="users" label="Inside campus now" value={st.inside} sub={`${st.studentsIn} student${st.studentsIn === 1 ? '' : 's'}, ${st.visitorsIn} visitor${st.visitorsIn === 1 ? '' : 's'}`} />
+      <Stat icon="login" label="Entries today" value={st.entriesToday} tone="green" sub="Gate scans and visitor check-ins" />
+      <Stat icon="walk" label="Active Saathi Walks" value={st.walksActive} tone="amber" sub={`${s.walksCompleted} completed`} />
+      <Stat icon="bell" label="Open alerts" value={st.openAlerts} tone={st.openAlerts ? 'red' : 'green'} sub={`${st.escalated} escalated`} onClick={() => go('alerts')} />
+      <Stat icon="box" label="Lab items issued" value={st.labIssued} tone="violet" onClick={() => go('stock')} />
+      <Stat icon="badge" label="Visitors on campus" value={st.visitors} onClick={() => go('visitors')} />
+    </div>
+  );
+}
+
+export function CctvHealth({ openCam, go }) {
+  const { s } = useApp();
   const counts = { online: 0, none: 0, offline: 0, tampered: 0 };
   for (const c of CAMERAS) counts[camStatus(s, c.id)] += 1;
   const issues = CAMERAS.filter((c) => ['tampered', 'offline'].includes(camStatus(s, c.id)));
-  const open = s.alerts.filter((a) => a.status !== 'resolved');
-  const st = campusStats(s, now);
-  const osc = s.inventory.find((i) => i.id === 'osc4');
-  const fresh = !s.alerts.length && !s.gate.log.length && !s.visitors.length && !counts.online;
   return (
-    <div className="space-y-4 p-4 pb-8">
-      {fresh && (
-        <Card className="ring-brand/30">
-          <div className="font-display text-sm font-bold uppercase tracking-wider text-slate-900">Getting started</div>
-          <p className="mt-1 text-sm text-slate-600">Nothing has happened yet. Everything on this dashboard is counted from real activity in the app.</p>
-          <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-slate-600">
-            <li>Connect cameras in <b className="text-slate-800">Guard → Cameras</b> to turn on live AI.</li>
-            <li>Students scan their ID at the gate and start Saathi Walks.</li>
-            <li>Register expected visitors in <button type="button" className="font-semibold text-brand underline" onClick={() => go('visitors')}>Visitors</button>.</li>
-          </ol>
-        </Card>
+    <Card>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2"><Icon name="video" className="h-5 w-5 text-brand" /><h3 className="font-bold text-slate-900">CCTV health</h3></div>
+        <Badge className={counts.online ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}>{counts.online > 0 && <LiveDot />}{counts.online}/{CAMERAS.length} connected</Badge>
+      </div>
+      <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+        {[[counts.none, 'Not connected', 'text-slate-600'], [counts.tampered + counts.offline, 'Faults', 'text-amber-600'], [s.ai.events, 'AI events', 'text-slate-900'], [s.darkSpots.length, 'Student reports', 'text-brand']].map(([v, k, c]) => (
+          <div key={k} className="rounded-xl bg-raise px-1 py-2"><div className={cls('text-lg font-extrabold', c)}>{v}</div><div className="text-[10px] leading-tight text-slate-500">{k}</div></div>
+        ))}
+      </div>
+      {issues.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {issues.map((c) => (
+            <button key={c.id} type="button" onClick={() => openCam(c.id)} className="flex w-full items-center gap-3 rounded-xl bg-amber-50 p-2 text-left ring-1 ring-amber-200">
+              <div className="w-20 shrink-0"><CameraFeed camId={c.id} showMeta={false} className="rounded-lg" /></div>
+              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-900">{c.id} · {c.name}</span><span className="block text-xs text-slate-500">{CAM_STATUS[camStatus(s, c.id)].label}{s.cams[c.id].since ? ` since ${fmtTime(s.cams[c.id].since)}` : ''}</span></span>
+              <Icon name="chevR" className="h-4 w-4 text-slate-400" />
+            </button>
+          ))}
+        </div>
       )}
-      <div className="grid grid-cols-2 gap-3">
-        <Stat icon="users" label="Inside campus now" value={st.inside} sub={`${st.studentsIn} student${st.studentsIn === 1 ? '' : 's'}, ${st.visitorsIn} visitor${st.visitorsIn === 1 ? '' : 's'}`} />
-        <Stat icon="login" label="Entries today" value={st.entriesToday} tone="green" sub="Gate scans and visitor check-ins" />
-        <Stat icon="walk" label="Active Saathi Walks" value={st.walksActive} tone="amber" sub={`${s.walksCompleted} completed`} />
-        <Stat icon="bell" label="Open alerts" value={st.openAlerts} tone={st.openAlerts ? 'red' : 'green'} sub={`${st.escalated} escalated`} />
-        <Stat icon="box" label="Lab items issued" value={st.labIssued} tone="violet" onClick={() => go('stock')} />
-        <Stat icon="badge" label="Visitors on campus" value={st.visitors} onClick={() => go('visitors')} />
-      </div>
+      {s.darkSpots.length > 0 && <p className="mt-2 text-xs text-slate-500">Latest student report: dark spot near {CP[s.darkSpots[0].cp].name}, {fmtTime(s.darkSpots[0].time)}.</p>}
+      {counts.online === 0 && <p className="mt-2 text-xs text-slate-500">No cameras connected yet. <button type="button" className="font-semibold text-brand underline" onClick={() => go('cams')}>Connect webcams</button> on this laptop, or a phone camera in Guard → Cameras.</p>}
+      <p className="mt-2 text-[11px] text-slate-400">Faces pixelated on device, no face search. Every view is in the audit log.</p>
+    </Card>
+  );
+}
 
-      <button type="button" onClick={openCc} className="flex w-full items-center gap-4 rounded-3xl bg-gradient-to-br from-brand/15 to-[#060c11] ring-1 ring-brand/25 p-4 text-left text-white shadow-md active:scale-[.99]">
-        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-white/10"><Icon name="map" className="h-6 w-6 text-accent" /></span>
-        <span className="flex-1">
-          <span className="block font-display text-lg font-semibold">Open command centre</span>
-          <span className="block text-sm text-white/75">3D digital twin, camera wall and live alerts, full screen</span>
-        </span>
-        <Icon name="chevR" />
-      </button>
-
-      <AiAdminCard />
-
-      <Card>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2"><Icon name="video" className="h-5 w-5 text-brand" /><h3 className="font-bold text-slate-900">CCTV health</h3></div>
-          <Badge className={counts.online ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}>{counts.online > 0 && <LiveDot />}{counts.online}/{CAMERAS.length} connected</Badge>
-        </div>
-        <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-          {[[counts.none, 'Not connected', 'text-slate-600'], [counts.tampered + counts.offline, 'Faults', 'text-amber-600'], [s.ai.events, 'AI events', 'text-slate-900'], [s.darkSpots.length, 'Student reports', 'text-brand']].map(([v, k, c]) => (
-            <div key={k} className="rounded-xl bg-raise px-1 py-2"><div className={cls('text-lg font-extrabold', c)}>{v}</div><div className="text-[10px] leading-tight text-slate-500">{k}</div></div>
-          ))}
-        </div>
-        {issues.length > 0 && (
-          <div className="mt-3 space-y-2">
-            {issues.map((c) => (
-              <button key={c.id} type="button" onClick={() => openCam(c.id)} className="flex w-full items-center gap-3 rounded-xl bg-amber-50 p-2 text-left ring-1 ring-amber-200">
-                <div className="w-20 shrink-0"><CameraFeed camId={c.id} showMeta={false} className="rounded-lg" /></div>
-                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-slate-900">{c.id} · {c.name}</span><span className="block text-xs text-slate-500">{CAM_STATUS[camStatus(s, c.id)].label}{s.cams[c.id].since ? ` since ${fmtTime(s.cams[c.id].since)}` : ''}</span></span>
-                <Icon name="chevR" className="h-4 w-4 text-slate-400" />
-              </button>
-            ))}
-          </div>
-        )}
-        {s.darkSpots.length > 0 && <p className="mt-2 text-xs text-slate-500">Latest student report: dark spot near {CP[s.darkSpots[0].cp].name}, {fmtTime(s.darkSpots[0].time)}.</p>}
-        {counts.online === 0 && <p className="mt-2 text-xs text-slate-500">No cameras connected yet. Connect webcams or a phone camera in Guard → Cameras.</p>}
-        <p className="mt-2 text-[11px] text-slate-400">Faces pixelated on device, no face search. Every view is in the audit log.</p>
-      </Card>
-
-      <div>
-        <SectionTitle right={<span className="text-xs text-slate-400">auto-updating</span>}>Live alerts</SectionTitle>
-        <Card className="divide-y divide-slate-100 p-0">
-          {open.length === 0 && <div className="p-4 text-center text-sm text-slate-500">No open alerts.</div>}
-          {open.slice(0, 5).map((a) => (
-            <div key={a.id} className="flex items-center gap-3 px-4 py-3">
-              <span className={cls('grid h-9 w-9 place-items-center rounded-xl', PRI[ALERT_TYPES[a.type].pri].tile)}><Icon name={ALERT_TYPES[a.type].icon} className="h-4 w-4" /></span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold text-slate-900">{ALERT_TYPES[a.type].label}</div>
-                <div className="text-xs text-slate-500">{CP[a.cp].name} · {ago(a.time, now)}</div>
-              </div>
-              {a.escalated ? <Badge className="bg-amber-100 text-amber-800">Escalated</Badge> : a.status === 'accepted' ? <Badge className="bg-brand-100 text-brand">Accepted</Badge> : <Badge className="bg-red-600 text-white">New</Badge>}
+export function LiveAlerts({ go, limit = 6 }) {
+  const { s, now } = useApp();
+  const open = s.alerts.filter((a) => a.status !== 'resolved');
+  return (
+    <div>
+      <SectionTitle right={<button type="button" onClick={() => go('alerts')} className="text-xs font-semibold text-brand">All alerts</button>}>Live alerts</SectionTitle>
+      <Card className="divide-y divide-slate-100 p-0">
+        {open.length === 0 && <div className="p-4 text-center text-sm text-slate-500">No open alerts.</div>}
+        {open.slice(0, limit).map((a) => (
+          <div key={a.id} className="flex items-center gap-3 px-4 py-3">
+            <span className={cls('grid h-9 w-9 place-items-center rounded-xl', PRI[ALERT_TYPES[a.type].pri].tile)}><Icon name={ALERT_TYPES[a.type].icon} className="h-4 w-4" /></span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold text-slate-900">{ALERT_TYPES[a.type].label}</div>
+              <div className="text-xs text-slate-500">{CP[a.cp].name} · {ago(a.time, now)}</div>
             </div>
-          ))}
-        </Card>
-      </div>
-
-      <Card>
-        <div className="flex items-center gap-2"><Icon name="cpu" className="h-5 w-5 text-violet-600" /><h3 className="font-bold text-slate-900">Cross-module rule</h3></div>
-        <p className="mt-1 text-sm text-slate-600">If an RFID instrument leaves the lab without being issued, alert <b>both</b> the lab door and the Main Gate.</p>
-        <div className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
-          {['Lab door RFID', 'Issue ledger', 'Lab + Gate alert'].map((t, i) => (
-            <span key={t} className="flex items-center gap-1.5">
-              <span className="rounded-lg bg-slate-100 px-2 py-1">{t}</span>{i < 2 && <Icon name="chevR" className="h-3 w-3 text-slate-400" />}
-            </span>
-          ))}
-        </div>
-        <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-50 p-2.5 text-sm">
-          <span>Oscilloscope #4</span>
-          {osc.holder ? <Badge className="bg-emerald-100 text-emerald-700">Issued to {(studentById(osc.holder) || {}).name || osc.holder}</Badge> : <Badge className="bg-slate-200 text-slate-700">In lab · not issued</Badge>}
-        </div>
-        <Btn v="outline" size="sm" className="mt-3 w-full" icon="zap" onClick={() => mutate((d) => equipmentLeaving(d, 'osc4'))}>Simulate: Oscilloscope #4 passes lab door</Btn>
+            {a.escalated ? <Badge className="bg-amber-100 text-amber-800">Escalated</Badge> : a.status === 'accepted' ? <Badge className="bg-brand-100 text-brand">Accepted</Badge> : <Badge className="bg-red-600 text-white">New</Badge>}
+          </div>
+        ))}
       </Card>
     </div>
   );
 }
 
+export function CrossModule() {
+  const { s, act } = useApp();
+  const osc = s.inventory.find((i) => i.id === 'osc4');
+  return (
+    <Card>
+      <div className="flex items-center gap-2"><Icon name="cpu" className="h-5 w-5 text-violet-600" /><h3 className="font-bold text-slate-900">Cross-module rule</h3></div>
+      <p className="mt-1 text-sm text-slate-600">If an RFID instrument leaves the lab without being issued, alert <b>both</b> the lab door and the Main Gate.</p>
+      <div className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
+        {['Lab door RFID', 'Issue ledger', 'Lab + Gate alert'].map((t, i) => (
+          <span key={t} className="flex items-center gap-1.5">
+            <span className="rounded-lg bg-slate-100 px-2 py-1">{t}</span>{i < 2 && <Icon name="chevR" className="h-3 w-3 text-slate-400" />}
+          </span>
+        ))}
+      </div>
+      <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-50 p-2.5 text-sm">
+        <span>Oscilloscope #4</span>
+        {osc.holder ? <Badge className="bg-emerald-100 text-emerald-700">Issued to {(studentById(osc.holder) || {}).name || osc.holder}</Badge> : <Badge className="bg-slate-200 text-slate-700">In lab · not issued</Badge>}
+      </div>
+      <Btn v="outline" size="sm" className="mt-3 w-full" icon="zap" onClick={() => act('equipmentLeaving', 'osc4')}>Simulate: Oscilloscope #4 passes lab door</Btn>
+    </Card>
+  );
+}
+
 // ---------------- Visitors ----------------
-function Visitors() {
-  const { s, mutate, now } = useApp();
+export function Visitors() {
+  const { s, act, now } = useApp();
   const t = new Date(now);
   const hhmm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const blank = { name: '', phone: '', purpose: 'Meeting', dest: 'Main Building', from: hhmm(t), to: hhmm(new Date(now + 2 * 3600 * 1000)) };
@@ -175,13 +154,7 @@ function Visitors() {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const valid = f.name.trim().length > 1 && f.phone.replace(/\D/g, '').length >= 10 && f.from < f.to;
   const create = () => {
-    const id = `V-${201 + s.visitors.length}`;
-    mutate((d) => {
-      d.visitors.unshift({ id, ...f, name: f.name.trim(), status: 'expected', created: Date.now() });
-      audit(d, 'Admin (Ms. Kulkarni)', `Created visitor pass ${id} · ${f.name.trim()}`, `${f.purpose} at ${f.dest}`, 'lookup');
-      toast(d, 'admin', `Pass ${id} created. QR sent by SMS`, 'success');
-      toast(d, 'guard', `Visitor expected: ${f.name.trim()} → ${f.dest}`, 'info');
-    });
+    const id = act('createVisitor', f);
     setShow(id);
     setF(blank);
   };
@@ -209,7 +182,7 @@ function Visitors() {
       </Card>
 
       <DemoPanel title="Demo">
-        <Btn v="outline" className="w-full" icon="badge" onClick={() => mutate(visitorWrongZone)}>Visitor seen near Hostel D</Btn>
+        <Btn v="outline" className="w-full" icon="badge" onClick={() => act('visitorWrongZone')}>Visitor seen near Hostel D</Btn>
       </DemoPanel>
 
       <div>
@@ -229,8 +202,8 @@ function Visitors() {
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <Btn size="sm" v="soft" icon="qr" onClick={() => setShow(v.id)}>Show pass</Btn>
                 {v.status === 'expected'
-                  ? <Btn size="sm" v="outline" icon="login" onClick={() => mutate((d) => { const vv = d.visitors.find((x) => x.id === v.id); vv.status = 'inside'; vv.checkedInAt = Date.now(); toast(d, 'admin', `${v.name} checked in at Main Gate`, 'success'); })}>Check in</Btn>
-                  : <Btn size="sm" v="outline" icon="logout" onClick={() => mutate((d) => { d.visitors.find((x) => x.id === v.id).status = 'left'; toast(d, 'admin', `${v.name} checked out. Pass closed`, 'info'); })}>Check out</Btn>}
+                  ? <Btn size="sm" v="outline" icon="login" onClick={() => act('visitorIn', v.id)}>Check in</Btn>
+                  : <Btn size="sm" v="outline" icon="logout" onClick={() => act('visitorOut', v.id)}>Check out</Btn>}
               </div>
             </Card>
           ))}
@@ -266,8 +239,8 @@ function VisitorPass({ v, onClose }) {
 }
 
 // ---------------- Inventory ----------------
-function Inventory() {
-  const { s, mutate } = useApp();
+export function Inventory() {
+  const { s, act } = useApp();
   const [report, setReport] = useState(false);
   const low = s.inventory.filter((i) => i.kind === 'consumable' && i.stock < i.min);
   return (
@@ -309,7 +282,7 @@ function Inventory() {
           </tbody>
         </table>
       </Card>
-      <Btn className="w-full" icon="file" onClick={() => { setReport(true); mutate((d) => audit(d, 'Admin (Ms. Kulkarni)', 'Generated yearly stock verification report', 'Annual audit, Electronics Lab', 'lookup')); }}>Generate yearly stock verification report</Btn>
+      <Btn className="w-full" icon="file" onClick={() => { setReport(true); act('stockReport'); }}>Generate yearly stock verification report</Btn>
       {report && <StockReport onClose={() => setReport(false)} />}
     </div>
   );
@@ -370,11 +343,44 @@ function StockReport({ onClose }) {
 }
 
 // ---------------- Digital twin + heatmap ----------------
-function TwinTab({ openCam, openCc }) {
+// The 3D twin with layer chips, as a panel on the console.
+export function TwinPanel({ openCam, openCc, className = 'h-[460px]' }) {
   const { s } = useApp();
   const [layers, setLayers] = useState({ cams: true, alerts: true, heat: true, guards: true, walk: true, labels: false });
   const [sel, setSel] = useState(null);
   const api = useRef(null);
+  const selCam = sel && sel.startsWith('cam:') ? sel.slice(4) : null;
+  const onPick = (id) => {
+    setSel(id);
+    if (id && api.current) api.current.flyTo(id.startsWith('alert:') ? 'cp:' + (s.alerts.find((a) => 'alert:' + a.id === id) || {}).cp : id);
+  };
+  return (
+    <Card className="overflow-hidden p-0">
+      <div className={cls('relative', className)}>
+        <Twin data={twinData(s, layers, sel)} onPick={onPick} apiRef={api} className="absolute inset-0" />
+        <div className="absolute left-2 right-2 top-2"><LayerChips layers={layers} setLayers={setLayers} dark /></div>
+        <div className="absolute bottom-2 right-2 flex gap-1.5">
+          {[['overview', 'Reset'], ['top', 'Top'], ['walk', 'Route']].map(([k, l]) => (
+            <button key={k} type="button" onClick={() => api.current && api.current.view(k)} className="rounded-full bg-black/55 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/15 hover:bg-black/75">{l}</button>
+          ))}
+          <button type="button" onClick={openCc} className="flex items-center gap-1.5 rounded-full bg-accent px-3 py-1 text-xs font-bold text-ink"><Icon name="columns" className="h-3.5 w-3.5" />Command centre</button>
+        </div>
+      </div>
+      {selCam ? (
+        <div className="flex items-center gap-3 p-3">
+          <div className="w-28 shrink-0"><CameraFeed camId={selCam} showMeta={false} /></div>
+          <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold text-slate-900">{selCam}</div><div className="text-xs text-slate-500">{CAM_STATUS[camStatus(s, selCam)].label}</div></div>
+          <Btn size="sm" icon="video" onClick={() => openCam(selCam)}>Open</Btn>
+        </div>
+      ) : (
+        <div className="px-3 py-2.5 text-xs text-slate-500">Drag to rotate, scroll to zoom, right-drag to tilt. Click a camera to see its feed. Buildings and boundary from OpenStreetMap.</div>
+      )}
+    </Card>
+  );
+}
+
+export function Heatmap() {
+  const { s } = useApp();
   const heat = heatFrom(s);
   const ranked = Object.entries(heat).sort((a, b) => b[1] - a[1]);
   const max = ranked.length ? ranked[0][1] : 1;
@@ -386,62 +392,34 @@ function TwinTab({ openCam, openCc }) {
     top[cp] = ALERT_TYPES[Object.entries(c).sort((x, y) => y[1] - x[1])[0][0]].label;
   }
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const selCam = sel && sel.startsWith('cam:') ? sel.slice(4) : null;
-  const onPick = (id) => {
-    setSel(id);
-    if (id && api.current) api.current.flyTo(id.startsWith('alert:') ? 'cp:' + (s.alerts.find((a) => 'alert:' + a.id === id) || {}).cp : id);
-  };
   return (
-    <div className="space-y-4 p-4 pb-8">
-      <Card className="overflow-hidden p-0">
-        <div className="relative h-[330px]">
-          <Twin data={twinData(s, layers, sel)} onPick={onPick} apiRef={api} className="absolute inset-0" />
-          <div className="absolute left-2 right-2 top-2"><LayerChips layers={layers} setLayers={setLayers} dark /></div>
-          <div className="absolute bottom-2 right-2 flex gap-1.5">
-            {[['overview', 'Reset'], ['top', 'Top']].map(([k, l]) => (
-              <button key={k} type="button" onClick={() => api.current && api.current.view(k)} className="rounded-full bg-black/55 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/15">{l}</button>
-            ))}
-            <button type="button" onClick={openCc} aria-label="Full screen" className="grid h-7 w-7 place-items-center rounded-full bg-accent text-ink"><Icon name="columns" className="h-3.5 w-3.5" /></button>
+    <div>
+      <SectionTitle>Alert heatmap by zone</SectionTitle>
+      <Card className="space-y-3">
+        {ranked.length === 0 && <p className="py-4 text-center text-sm text-slate-500">No alerts recorded yet. Zones fill in as alerts come in.</p>}
+        {ranked.map(([id, n]) => (
+          <div key={id}>
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-semibold text-slate-900">{CP[id].name}</span>
+              <span className="tabular-nums text-slate-600"><b className="text-slate-900">{n}</b>{(() => { const t = s.alerts.filter((a) => a.cp === id && a.time >= today.getTime()).length; return t ? <span className="ml-1 text-xs font-semibold text-red-600">{t} today</span> : null; })()}</span>
+            </div>
+            <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100"><div className="grow h-full rounded-full bg-gradient-to-r from-accent to-coral" style={{ width: `${(n / max) * 100}%` }} /></div>
+            <div className="mt-0.5 text-[11px] text-slate-500">Mostly: {top[id]}</div>
           </div>
-        </div>
-        {selCam ? (
-          <div className="flex items-center gap-3 p-3">
-            <div className="w-28 shrink-0"><CameraFeed camId={selCam} detections={false} showMeta={false} /></div>
-            <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold text-slate-900">{selCam}</div><div className="text-xs text-slate-500">{CAM_STATUS[camStatus(s, selCam)].label}</div></div>
-            <Btn size="sm" icon="video" onClick={() => openCam(selCam)}>Open</Btn>
+        ))}
+        {ranked.length > 0 && (
+          <div className="flex items-start gap-3 rounded-xl bg-brand-50 p-3 ring-1 ring-brand-100">
+            <Icon name="bulb" className="mt-0.5 h-5 w-5 text-brand" />
+            <p className="text-sm text-slate-700"><b>Busiest zone:</b> {CP[ranked[0][0]].name} with {ranked[0][1]} alert{ranked[0][1] === 1 ? '' : 's'}, mostly {top[ranked[0][0]].toLowerCase()}. Consider a guard post or another camera there.</p>
           </div>
-        ) : (
-          <div className="px-3 py-2.5 text-xs text-slate-500">Drag to rotate, pinch to zoom. Tap a camera to see its feed. Buildings and boundary from OpenStreetMap.</div>
         )}
       </Card>
-      <div>
-        <SectionTitle>Alert heatmap by zone</SectionTitle>
-        <Card className="space-y-3">
-          {ranked.length === 0 && <p className="py-4 text-center text-sm text-slate-500">No alerts recorded yet. Zones fill in as alerts come in.</p>}
-          {ranked.map(([id, n]) => (
-            <div key={id}>
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-semibold text-slate-900">{CP[id].name}</span>
-                <span className="tabular-nums text-slate-600"><b className="text-slate-900">{n}</b>{(() => { const t = s.alerts.filter((a) => a.cp === id && a.time >= today.getTime()).length; return t ? <span className="ml-1 text-xs font-semibold text-red-600">{t} today</span> : null; })()}</span>
-              </div>
-              <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100"><div className="grow h-full rounded-full bg-gradient-to-r from-accent to-coral" style={{ width: `${(n / max) * 100}%` }} /></div>
-              <div className="mt-0.5 text-[11px] text-slate-500">Mostly: {top[id]}</div>
-            </div>
-          ))}
-        </Card>
-      </div>
-      {ranked.length > 0 && (
-        <Card className="flex items-start gap-3 bg-brand-50 ring-brand-100">
-          <Icon name="bulb" className="mt-0.5 h-5 w-5 text-brand" />
-          <p className="text-sm text-slate-700"><b>Busiest zone:</b> {CP[ranked[0][0]].name} with {ranked[0][1]} alert{ranked[0][1] === 1 ? '' : 's'}, mostly {top[ranked[0][0]].toLowerCase()}. Consider a guard post or another camera there.</p>
-        </Card>
-      )}
     </div>
   );
 }
 
 // ---------------- Audit ----------------
-function Audit() {
+export function Audit() {
   const { s, now } = useApp();
   const [cat, setCat] = useState('all');
   const list = s.audit.filter((a) => cat === 'all' || a.cat === cat);
@@ -456,7 +434,7 @@ function Audit() {
             <div key={k} className="rounded-xl bg-white/10 px-1 py-2"><div className="text-xl font-extrabold">{v}</div><div className="text-[10px] leading-tight text-white/80">{k}</div></div>
           ))}
         </div>
-        <p className="mt-3 text-xs text-white/65">Counted from activity recorded on this device. {m.views} footage view{m.views === 1 ? '' : 's'} logged. Face search does not exist in Kavach.</p>
+        <p className="mt-3 text-xs text-white/65">Counted from activity recorded in Kavach. {m.views} footage view{m.views === 1 ? '' : 's'} logged. Face search does not exist in Kavach.</p>
       </div>
       <div>
         <SectionTitle>Audit log</SectionTitle>

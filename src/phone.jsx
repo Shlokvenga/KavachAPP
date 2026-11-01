@@ -1,23 +1,24 @@
-// App shell: start screen, role switcher, phone frame(s), shared state and timers.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+// Phone edition (the Android app and the phone web app): Student and Guard only.
+// The Admin console is in the laptop edition (src/laptop.jsx), served by the hub.
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { GENDER, STATE_VERSION, STUDENTS, camById, cls, makeInitial, pad, verifyQr } from './data.js';
-import { AppCtx, aiEvent, gateQr, tick, toast, useApp } from './store.js';
-import { configureLive } from './vision/live.js';
-import { deleteTemplate, loadTemplate, verify } from './vision/face.js';
+import { GENDER, STUDENTS, cls, pad } from './data.js';
+import { AppCtx, useApp } from './ctx.js';
+import { useKavach } from './useKavach.js';
+import { parsePairText } from './sync.js';
+import { PairSheet, SyncChip, loadDeviceName } from './pair.jsx';
 import { GenderSwitch } from './student.jsx';
 import { Avatar, Btn, Icon, Logo, Toasts } from './ui.jsx';
 import { CAMPUS_SHORT } from './campus.js';
 import StudentApp from './student.jsx';
 import GuardApp from './guard.jsx';
-import AdminApp from './admin.jsx';
 
 const ROLES = [
   { id: 'student', label: 'Student', icon: 'user', title: 'Student app', who: '', desc: 'Rotating QR ID, Saathi Walk night escort, LabLedger and your privacy.' },
   { id: 'guard', label: 'Guard', icon: 'shield', title: 'Guard console', who: 'Ramesh, Sunita, Imran', desc: 'Live alerts, CCTV camera wall with PTZ and talk-down, campus map.' },
-  { id: 'admin', label: 'Admin', icon: 'chart', title: 'Admin dashboard', who: 'Security & lab office', desc: '3D digital twin, CCTV health, visitor passes, lab stock and audit log.' },
 ];
-const APPS = { student: StudentApp, guard: GuardApp, admin: AdminApp };
+const ROLE_IDS = ROLES.map((r) => r.id);
+const APPS = { student: StudentApp, guard: GuardApp };
 
 function useMedia(q) {
   const [m, setM] = useState(() => window.matchMedia(q).matches);
@@ -30,86 +31,32 @@ function useMedia(q) {
   return m;
 }
 
-// Everything recorded in the app is kept on this device, so it survives a restart.
-const STORE_KEY = 'kavach-state';
-function loadState() {
-  try {
-    const v = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
-    if (v && v.v === STATE_VERSION) return { ...v, toasts: [] };
-  } catch (e) { /* storage unavailable or corrupt: start fresh */ }
-  return makeInitial();
-}
-function saveState(s) {
-  const data = { ...s, toasts: [] };
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); return; } catch (e) { /* probably full */ }
-  // out of space: drop the oldest snapshots and try again
-  try {
-    const slim = { ...data, alerts: data.alerts.map((a, i) => (i < 15 ? a : { ...a, snap: null })) };
-    localStorage.setItem(STORE_KEY, JSON.stringify(slim));
-  } catch (e) { /* give up quietly; the app keeps working in memory */ }
+// A pairing link (the QR on the laptop, opened by the phone's camera app) pairs at once.
+function pairFromUrl() {
+  const p = parsePairText(location.href);
+  if (p) { try { history.replaceState(null, '', location.pathname); } catch (e) { /* ignore */ } }
+  return p;
 }
 
 function App() {
-  const [s, setS] = useState(loadState);
-  const [now, setNow] = useState(Date.now());
   const [started, setStarted] = useState(false);
-  const [role, setRoleState] = useState('student');
+  const [role, setRoleState] = useState(() => { try { const r = localStorage.getItem('kavach-role'); return ROLE_IDS.includes(r) ? r : 'student'; } catch (e) { return 'student'; } });
   const [split, setSplit] = useState(false);
   const [gen, setGen] = useState(0);
+  const [pairOpen, setPairOpen] = useState(() => pairFromUrl());
   // Inside the Android app (Capacitor) we always run full screen, never in a phone frame.
   const native = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   const wide = useMedia('(min-width: 768px)') && !native;
-  const xl = useMedia('(min-width: 1200px)') && !native;
+  const xl = useMedia('(min-width: 960px)') && !native;
   const splitOn = split && xl;
 
-  const mutate = useCallback((fn) => setS((prev) => { const d = structuredClone(prev); fn(d); return d; }), []);
-  const setRole = useCallback((r) => { setRoleState(r); setStarted(true); }, []);
-  const reset = useCallback(() => {
-    if (!window.confirm('Erase everything recorded on this device (alerts, scans, walks, visitors, audit log, enrolled faces)?')) return;
-    Object.values(STUDENTS).forEach((st) => deleteTemplate(st.id));
-    setS((prev) => { const d = makeInitial(prev.gender); toast(d, 'all', 'All data cleared. Starting fresh.', 'success'); return d; });
-    setGen((g) => g + 1);
-  }, []);
+  const k = useKavach({ edition: 'phone', role: started ? role : null, deviceName: loadDeviceName(role === 'guard' ? 'Guard phone' : 'Student phone') });
+  const setRole = useCallback((r) => { setRoleState(r); setStarted(true); try { localStorage.setItem('kavach-role', r); } catch (e) { /* ignore */ } }, []);
+  const kReset = k.reset;
+  const reset = useCallback(() => { if (kReset()) setGen((g) => g + 1); }, [kReset]);
+  const openPair = useCallback(() => setPairOpen(true), []);
 
-  // save shortly after changes (the 1 s clock tick only rewrites when something changed)
-  const saved = useRef('');
-  useEffect(() => {
-    const t = setTimeout(() => {
-      const key = JSON.stringify([s.seq, s.alerts.length, s.gate.log.length, s.walk && s.walk.steps.map((x) => x.status), s.gender, s.visitors, s.issued.length, s.audit.length, s.cams]);
-      if (key !== saved.current) { saved.current = key; saveState(s); }
-    }, 800);
-    return () => clearTimeout(t);
-  }, [s]);
-
-  useEffect(() => {
-    const id = setInterval(() => { setNow(Date.now()); mutate(tick); }, 1000);
-    return () => clearInterval(id);
-  }, [mutate]);
-
-  // Real cameras feed the same shared state as the simulated ones.
-  const stateRef = useRef(s);
-  stateRef.current = s;
-  useEffect(() => {
-    configureLive({
-      onEvent: (camId, ev, snap) => mutate((d) => aiEvent(d, camId, ev, snap)),
-      onQr: async (camId, text, slot) => {
-        let face = null;
-        const q = verifyQr(text);
-        if (q.ok && loadTemplate(q.id)) face = await verify(slot.video, q.id).catch(() => null);
-        mutate((d) => gateQr(d, camId, text, face));
-      },
-      ctx: () => {
-        const st = stateRef.current;
-        return {
-          // coverage to compute: a camera near an open alert analyses more frames
-          investigate: (camId) => { const cam = camById(camId); return st.alerts.some((a) => a.status !== 'resolved' && (a.cam === camId || a.cp === cam.cp)); },
-          scansSince: (sec) => st.gate.log.filter((l) => l.dir === 'IN' && Date.now() - l.time <= sec * 1000).length,
-        };
-      },
-    });
-  }, [mutate]);
-
-  const ctx = useMemo(() => ({ s, mutate, now, role, setRole, split: splitOn, reset }), [s, mutate, now, role, setRole, splitOn, reset]);
+  const ctx = useMemo(() => ({ ...k, role, setRole, split: splitOn, reset, roles: ROLE_IDS, openPair }), [k, role, setRole, splitOn, reset, openPair]);
 
   const phone = (r, key) => (
     <Phone key={key} framed={wide} role={r}>
@@ -141,6 +88,13 @@ function App() {
       ) : (
         phone(started ? role : 'start', (started ? role : 'start') + gen)
       )}
+      {pairOpen && (
+        <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/60 md:items-center">
+          <div data-phone="pair" className="relative flex h-[100dvh] w-full max-w-[420px] flex-col overflow-hidden bg-ink md:h-[min(820px,92vh)] md:rounded-[32px]">
+            <PairSheet onClose={() => setPairOpen(false)} initial={typeof pairOpen === 'object' ? pairOpen : null} />
+          </div>
+        </div>
+      )}
     </AppCtx.Provider>
   );
 }
@@ -151,7 +105,7 @@ function RoleApp({ role }) {
 }
 
 function Phone({ framed, role, children }) {
-  const { reset, setRole, s } = useApp();
+  const { setRole, s, openPair } = useApp();
   const showBar = !framed && role !== 'start';
   const allToasts = s.toasts.filter((t) => t.role === 'all');
   // Overlays (sheets, camera viewer, prompts) are absolutely positioned inside the
@@ -163,7 +117,7 @@ function Phone({ framed, role, children }) {
         <div className="flex shrink-0 items-center gap-2 border-b border-line bg-[#060c11] px-3 py-1.5 pt-[max(6px,env(safe-area-inset-top))]">
           <Logo className="h-6 w-6" />
           <RoleSwitch value={role} onChange={setRole} compact />
-          <button type="button" onClick={reset} aria-label="Reset demo" className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white"><Icon name="refresh" className="h-4 w-4" /></button>
+          <SyncChip onClick={openPair} className="!px-2" />
         </div>
       )}
       <div className="relative flex min-h-0 flex-1 flex-col">
@@ -254,6 +208,8 @@ function StartScreen({ onOpen }) {
         </div>
       </div>
 
+      <div className="mt-4 px-5"><HubCard /></div>
+
       <div className="mt-6 space-y-3 px-5 pb-8">
         {[
           ['qr', 'Verified at the doors', 'Rotating QR + 1:1 face match at gate, labs and hostels.'],
@@ -271,8 +227,21 @@ function StartScreen({ onOpen }) {
   );
 }
 
+function HubCard() {
+  const { mode, pairing, sync, openPair } = useApp();
+  return (
+    <button type="button" onClick={openPair} className="flex w-full items-center gap-3 rounded-2xl bg-white/[.07] p-3 text-left ring-1 ring-white/10 hover:ring-brand/50">
+      <span className={cls('grid h-9 w-9 shrink-0 place-items-center rounded-xl', mode === 'hub' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-brand/20 text-brand')}><Icon name="wifi" className="h-5 w-5" /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold">{mode === 'hub' ? `Campus hub · ${pairing.hub || pairing.url}` : 'Connect to the campus hub'}</span>
+        <span className="block text-xs text-white/65">{mode === 'hub' ? (sync.status === 'online' ? 'Synced live with the security laptop' : 'Hub not reachable. Actions are kept and sent later.') : 'Pair with the security laptop to share alerts live. Works on its own until then.'}</span>
+      </span>
+    </button>
+  );
+}
+
 function TopBar({ started, setStarted, split, setSplit, canSplit }) {
-  const { role, setRole, reset } = useApp();
+  const { role, setRole, reset, openPair } = useApp();
   return (
     <header className="flex w-full max-w-[1240px] items-center gap-4 px-6 py-4">
       <button type="button" onClick={() => { setStarted(false); setSplit(false); }} className="flex items-center gap-2.5 text-left">
@@ -290,7 +259,8 @@ function TopBar({ started, setStarted, split, setSplit, canSplit }) {
           <Btn v={split ? 'primary' : 'outline'} size="sm" icon="columns" onClick={() => setSplit(!split)}>{split ? 'Single view' : 'Side by side'}</Btn>
         )}
         {started && !split && <Btn v="outline" size="sm" icon="home" onClick={() => setStarted(false)}>Start screen</Btn>}
-        <Btn v="outline" size="sm" icon="refresh" onClick={reset}>Reset demo</Btn>
+        <SyncChip onClick={openPair} className="h-9" />
+        <Btn v="outline" size="sm" icon="refresh" onClick={reset}>Reset</Btn>
       </div>
     </header>
   );
@@ -301,7 +271,6 @@ const GUIDE = [
   ['guard', 'Connect cameras', 'Guard → Cameras → Find cameras. Assign your webcam to a camera, e.g. CAM-A1 at the Library, and walk in front of it.'],
   ['student', 'Saathi Walk', 'Help me get home → Start. With a camera at the Library the check-in photo is real (anonymised). Try Go missing.'],
   ['guard', 'Respond', 'Accept the alert, open the live camera, play the speaker warning, resolve it.'],
-  ['admin', 'Admin', 'Every number, the heatmap, twin and audit log fill in from what you just did.'],
 ]
 
 function DemoGuide() {
@@ -324,7 +293,7 @@ function DemoGuide() {
             </li>
           ))}
         </ol>
-        <p className="mt-4 border-t border-slate-200 pt-3 text-xs text-slate-500">All roles share live data. Try <b>Side by side</b> on a wide screen to see changes flow between apps.</p>
+        <p className="mt-4 border-t border-slate-200 pt-3 text-xs text-slate-500">This is the phone edition (Student and Guard). The <b>Admin console</b> with the 3D twin runs on the security laptop: start the Kavach hub there and pair phones from its Setup page.</p>
       </div>
     </aside>
   );

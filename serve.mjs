@@ -1,5 +1,6 @@
-// Serves www/ on http://localhost:8080 (needed for real cameras and on-device AI in a
-// browser: models are fetched over http, and cameras need localhost or https).
+// Serves the phone edition (www/) on http://localhost:8080, for trying the phone app in a
+// desktop browser with real cameras and on-device AI (cameras need localhost or https).
+// The laptop edition runs from the hub instead: npm start.
 // Usage: npm run serve   (PORT=9000 npm run serve to change the port)
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';

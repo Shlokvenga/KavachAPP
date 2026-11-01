@@ -2,112 +2,149 @@
 
 **Identify at the doors, anonymous in between.**
 
-Kavach is a clickable prototype of a campus safety and asset protection app for KLE Technological University, Hubballi (B.V. Bhoomaraddi Campus, Vidyanagar). Students are verified at checkpoints with a rotating QR code. Between checkpoints, CCTV only watches for dangerous behaviour and never identifies anyone. At night, students can ask for an escort called **Saathi Walk**.
+Kavach is a campus safety and asset protection prototype for KLE Technological University, Hubballi (B.V. Bhoomaraddi Campus, Vidyanagar). Students are verified at checkpoints with a rotating QR code. Between checkpoints, CCTV only watches for dangerous behaviour and never identifies anyone. At night, students can ask for an escort called **Saathi Walk**.
 
-It ships as an **Android app** (and the same build runs in a browser). There is no backend. The app **starts empty**: every alert, scan, walk, visitor, statistic and audit entry comes from what you do in the app, and it is saved on the device so it survives a restart (Student → Profile → **Clear all data** erases it). Cameras show video only when a real webcam or phone camera is connected; demo buttons simulate the parts that need hardware (gate scanner, RFID, weight sensors).
+It comes in two editions:
 
-## Get the Android app
+| Edition | Who uses it | What it has | Runs on |
+|---|---|---|---|
+| **Phone** | Students and guards | Student app, Guard app | Android app (APK), or any phone browser |
+| **Laptop** | Security office | **Admin console** (3D digital twin, CCTV, alerts, visitors, lab stock, audit, Setup) and the **campus hub** that links the phones | Windows, macOS or Linux with Node.js 18+ |
 
-Every push to GitHub builds a debug APK in GitHub Actions (`.github/workflows/android.yml`).
+The Admin view exists only in the laptop edition. The hub serves the console only to the laptop itself (`http://localhost:8787`); phones that open the hub get the phone edition, and admin-only actions are refused from phones.
 
-1. Open the repository's **Actions** tab, then the latest **Android APK** run.
-2. Download the **kavach-debug-apk** artifact and unzip it.
-3. Copy `app-debug.apk` to an Android phone (Android 6 or newer), open it and allow installing from this source.
+The app **starts empty**: every alert, scan, walk, visitor, statistic and audit entry comes from what people do in it. Cameras show video only when a real webcam or phone camera is connected; demo buttons simulate the parts that need hardware (gate turnstile, RFID, weight sensors).
 
-To build it yourself you need Node 22, JDK 21 and the Android SDK (Android Studio installs it):
+## Set up on campus
 
-```bash
-npm install
+### 1. Laptop (security office)
+
+1. Download the **kavach-laptop** artifact from the latest run in the repository's **Actions** tab, and unzip it anywhere (e.g. `Documents\Kavach`).
+2. Install **Node.js LTS** (18 or newer) from [nodejs.org](https://nodejs.org). Nothing else is needed.
+3. Start Kavach:
+   - **Windows:** double-click `start-windows.bat`. When Windows Defender Firewall asks about Node.js, allow it on **private networks**.
+   - **macOS:** double-click `start-mac.command` (the first time: right-click → Open). Allow incoming connections when asked.
+   - **Linux:** run `./start-linux.sh`.
+
+   A window shows the hub's Wi-Fi address and pairing code, and the Admin console opens at `http://localhost:8787`. Keep that window open while Kavach is in use.
+4. The console opens on **Setup** the first time:
+   - **Cameras:** plug in USB webcams, open **Cameras → Find cameras** and assign each one to a campus camera (e.g. `CAM-G1` at the Main Gate). Use Chrome or Edge. The AI runs on the laptop.
+   - **Pair phones:** see below.
+   - Click **Finish setup**.
+
+Campus data is saved in the `data` folder next to `hub.mjs` (`state.json`, `config.json`). Copy that folder to back it up or to move Kavach to another laptop. **Setup → Export** downloads it as JSON, and **Erase all campus data** starts fresh.
+
+### 2. Phones (guards and students)
+
+1. Download the **kavach-debug-apk** artifact from the same Actions run, unzip it, copy `app-debug.apk` to the phone (Android 6+) and install it.
+2. Connect the phone to the **same Wi-Fi** as the laptop.
+3. In the app tap **Connect to the campus hub → Scan pairing QR** and scan the QR on the laptop's Setup page, or type the address and 6-digit code.
+
+No app? Scan the Setup QR with the phone's camera: it opens Kavach in the browser and pairs automatically (cameras and the face check need the app, because browsers only allow cameras on secure pages).
+
+Each phone gets its own token, so the laptop can **unpair** one phone without affecting the others, and a **new code** only applies to phones pairing from then on. If the Wi-Fi drops, the phone keeps working and sends its actions (SOS, check-ins, scans) when the hub is back. Without a hub, a phone works on its own as a stand-alone demo.
+
+## How the editions work together
+
+```
+ Student phone ─┐                       ┌─ Admin console (browser on the laptop)
+ Guard phone  ──┼── Wi-Fi ── Kavach hub ┤
+ Guard phone  ──┘   (long-poll sync)    └─ data/state.json
 ```
 
-```bash
-npm run android:apk
-```
-
-The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`. `npm run android:open` opens the project in Android Studio instead.
-
-## Run it in a browser
-
-- **Quick look:** open `www/index.html` (double-click). Everything works except real cameras and on-device AI.
-- **With real cameras and AI:** run the commands below, then open `http://localhost:8080` in Chrome or Edge. Plug in up to a few USB webcams, or use the laptop camera.
-
-```bash
-npm install
-```
-
-```bash
-npm run serve
-```
-
-On a laptop it shows a phone frame with a demo guide, and on wide screens **Side by side** shows the Student, Guard and Admin apps together.
+- The **hub** (`hub/server.js`, bundled to `hub.mjs`) keeps the one shared copy of the campus state, runs the timers (alert escalation, missed-checkpoint prompts) and saves to disk.
+- Every change is a **named action** (`src/actions.js`), such as `passNext`, `acceptAlert` or `createVisitor`. A device applies it locally at once, then sends it to the hub, which runs the same code and pushes the new state to every device. A retried action never runs twice.
+- Which demo student a phone is signed in as (Priya or Aarav) stays on that phone, so two students can use Kavach at the same time. Student notifications reach only that student, and a Saathi Walk can only be driven from the phone that started it.
+- A camera connected on the laptop shows as **live** on guard phones ("Live on Security laptop"). Video and AI stay on the device with the camera; only alerts, anonymised alert frames and checkpoint photos are shared. When a student passes a checkpoint, the device with that checkpoint's camera adds the photo.
 
 ## Demo script (about 6 minutes)
 
-0. **Start screen.** Pick Female (pink) or Male (blue), then open the student app. Everything starts at zero.
-1. **Student → My ID.** Unlock with fingerprint. The QR changes every 10 seconds. *Simulate gate scan*, then *Scan IN again* (anti-passback), then *Try screenshot QR* (rejected).
-2. **Student → Saathi Walk.** *Help me get home* → Girls Hostel → *Start walk*. Each checkpoint shows how many cameras cover it. Tap *Pass next checkpoint*, then *Go missing* and let the 30 s timer run out.
-3. **Guard → Alerts.** The *Missed checkpoint* alert has the last photo and a **Live CAM** button that opens the camera. Accept, turn on lights, play the speaker warning.
-4. **Guard → Cameras.** Click **Find cameras** and connect a webcam, e.g. as `CAM-B1`: walk past it, run, or stand still to trigger the AI rules. Cameras without a real device say "Not connected"; connected ones show live, anonymised video. Open one to zoom, pan (PTZ cameras), use the talk-down speaker, take a snapshot, flag an incident or request an unblur (goes to the student committee). In **Demo**, tamper a camera or take one offline.
-5. **Admin → Twin.** The 3D digital twin (CesiumJS) shows buildings, camera coverage cones, live alerts as beams, guards, the Saathi Walk route and an alert heatmap. Tap a camera to see its feed. **Open command centre** (on Overview) gives a full-screen twin with a camera wall; turn the phone sideways.
-6. **Admin.** CCTV health, visitor passes, lab stock report, and the audit log, which records every camera view, snapshot and unblur request.
+Start the laptop edition (`npm start` from source, or the start script), then open the phone edition on a phone or in a second browser window and pair it.
 
-## What's inside
+0. **Phone → start screen.** Pick Female (pink) or Male (blue), then open the student app.
+1. **Student → My ID.** Unlock with fingerprint. The QR changes every 10 seconds. *Simulate gate scan*, then *Scan IN again* (anti-passback), then *Try screenshot QR* (rejected). The console's **Entries today** goes up.
+2. **Student → Saathi Walk.** *Help me get home* → *Start walk*. With a webcam on the laptop assigned to `CAM-A1`, the checkpoint A photo is a real, anonymised frame. Tap *Go missing* and let the timer run out.
+3. **Guard phone → Alerts.** The *Missed checkpoint* alert has the last photo. Accept it, turn on lights, play the speaker warning. The console shows it as accepted.
+4. **Laptop → Cameras.** Walk past the webcam, run, or stand still to trigger the AI rules. Guard phones get the alert with the anonymised frame.
+5. **Laptop → Digital twin / Command centre.** The 3D campus with camera cones, live alert beams, guards, the walk route and the heatmap.
+6. **Laptop → Visitors, Lab stock, Audit.** Visitor passes (guards are told), the yearly stock report, and the audit log of every camera view, snapshot and unblur request.
 
-| Role | Features |
+## Features
+
+| Where | Features |
 |---|---|
-| Student | Rotating QR ID with gate scan, Saathi Walk (checkpoint photos tagged with the camera, camera coverage per stretch, "Are you OK?", SOS, follower alert, share link, photos deleted on arrival), report a dark spot or broken camera, LabLedger, My data (what a camera actually sees, camera coverage map, retention, privacy promise) |
-| Guard | Alert feed linked to cameras, live map with camera coverage layer, **Cameras** tab (camera wall, viewer with PTZ, talk-down, snapshot, flag incident, unblur request), active walks, demo triggers including camera tamper and camera offline |
-| Admin | Live stats, CCTV health, **CesiumJS digital twin** with layer toggles and full-screen command centre, visitor passes, lab inventory and yearly report, audit log and monthly transparency summary |
-
-All three roles share one in-memory state, so an action in one shows up live in the others.
+| Student (phone) | Rotating QR ID with gate scan, Saathi Walk (checkpoint photos tagged with the camera, camera coverage per stretch, "Are you OK?", SOS, follower alert, share link, photos deleted on arrival), report a dark spot or broken camera, LabLedger, My data (what a camera sees, retention, privacy promise), campus hub pairing |
+| Guard (phone) | Alert feed linked to cameras, live map with camera coverage, Cameras tab (camera wall, viewer with PTZ, talk-down, snapshot, flag incident, unblur request, lend the phone's camera), active walks, demo triggers |
+| Admin (laptop) | Overview with live stats and the twin, **CesiumJS digital twin** and full-screen command centre, laptop webcams with on-device AI, all alerts on the map, visitor passes, lab inventory and yearly report, audit log and transparency report, **Setup** (pairing QR and code, paired phones, data export and erase) |
 
 ## On-device intelligence
 
-All AI runs on the phone or laptop with bundled models ([Human](https://github.com/vladmandic/human): CenterNet, BlazeFace, FaceRes, anti-spoof, liveness). No video, face or embedding leaves the device, and it works offline.
-
-**Connect real cameras:** Guard → Cameras → **Find cameras**, then assign each webcam (or the phone's camera in the app) to a campus camera such as `CAM-G1` (gate), `CAM-B1` (path) or `CAM-W1` (wall). From then on that camera shows its real, anonymised video everywhere in the app: camera wall, viewer, command centre and alert snapshots.
+All AI runs on the phone or laptop that has the camera, with bundled models ([Human](https://github.com/vladmandic/human): CenterNet, BlazeFace, FaceRes, anti-spoof, liveness). No video, face or embedding leaves that device, and it works offline.
 
 | What | How it works |
 |---|---|
 | Privacy in the pixels | Until the AI is ready the whole view is pixelated. After that, every face box **and** the head area of every person is pixelated in each frame, so a missed face does not leak. Alert snapshots come from this anonymised view. |
 | No face search, by design | Campus cameras never compute a face embedding. Only a gate does, to compare **1:1** with the one student whose pass was shown. |
-| Behaviour rules | An anonymous tracker (people get short numbers like `#12`) feeds explainable rules: **following, running, loitering, fall, crowding, unattended bag, perimeter line crossing, tailgating** (more people crossing the gate line than QR scans), **asset exit** (laptop carried through the lab door, standing in for RFID equipment) and **camera tamper** (covered, blurred or moved, using image statistics only). Each alert says why, with the measured values and the threshold. |
+| Behaviour rules | An anonymous tracker (people get short numbers like `#12`) feeds explainable rules: **following, running, loitering, fall, crowding, unattended bag, perimeter line crossing, tailgating** (more people crossing the gate line than QR scans), **asset exit** and **camera tamper** (image statistics only). Each alert says why, with the measured values and the threshold. |
 | Coverage to compute | Cameras near an open alert switch from WATCH (model runs only when the picture changes) to INVESTIGATE (several frames per second). |
-| Real gate check | A camera assigned to `CAM-G1` reads the student's rotating QR, checks its signature and age (screenshots stop working within 20 s, each code works once), applies anti-passback, then runs the 1:1 face check if the student enrolled. |
-| Face enrolment | Student → Profile → **Face check at gates**. The template (numbers, no photo) stays on that device. My ID → **Live gate check** tests it. |
-| Thresholds | Match at 65% or more. From 50% to 65% the gate asks a guard to check the ID card instead of deciding. Calibrated on only 55 faces from sample photos (different people scored up to 59%), so **re-calibrate with consented campus data before real use**. |
+| Real gate check | A camera assigned to `CAM-G1` reads the student's rotating QR, checks its signature and age (screenshots stop working within 20 s, each code works once), applies anti-passback, then runs the 1:1 face check if the student enrolled on that device. |
+| Face enrolment | Student → Profile → **Face check at gates**. The template (numbers, no photo) stays on that phone. My ID → **Live gate check** tests it. |
+| Thresholds | Match at 65% or more. From 50% to 65% the gate asks a guard to check the ID card instead of deciding. Calibrated on only 55 faces from sample photos, so **re-calibrate with consented campus data before real use**. |
 
-Each rule can be switched off and its sensitivity changed per camera (Guard → Cameras → Rules).
+Each rule can be switched off and its sensitivity changed per camera (Cameras → Rules).
 
 ## Theme
 
-Dark tactical theme from the CAMIQ design: obsidian background, telemetry cyan for Guard and Admin, coral for emergencies, emerald for safe and amber for warnings. Fonts are Space Grotesk (headings), Plus Jakarta Sans (text) and JetBrains Mono (data), bundled so they work offline.
-
-**Student theme by gender:** pick the demo student on the start screen or in Profile. **Female (Priya) uses pink, male (Aarav) uses blue.** Each has their own pass, gate history, hostel route (Girls Hostel or Boys Hostel) and lab records. Saathi Walk offers a **female guard** preference (on by default for female students), and guards see a pink or blue tag on every walk alert.
+Dark tactical theme from the CAMIQ design: obsidian background, telemetry cyan for Guard and Admin, coral for emergencies, emerald for safe and amber for warnings. Fonts are Space Grotesk (headings), Plus Jakarta Sans (text) and JetBrains Mono (data), bundled so they work offline. **Students: pink for female (Priya), blue for male (Aarav).** Saathi Walk offers a **female guard** preference (on by default for female students), and guards see a pink or blue tag on every walk alert.
 
 ## Campus layout
 
-The map and the 3D twin are an **approximate, schematic** layout of the KLE Tech Hubballi campus, not a survey. Everything (buildings, roads, checkpoints, guard posts and the 14 cameras with their direction and range) lives in `src/campus.js`, in metres from the campus centre. Edit that one file to match the real campus; the 2D map, the 3D twin and camera coverage all update.
+The campus boundary and the 15 building footprints come from **OpenStreetMap** (© OpenStreetMap contributors, ODbL), via the CAMIQ project. Checkpoints, guard posts, walkways and the 15 cameras (with direction and range) are placed on that real layout; roads and camera positions are approximate. Everything lives in `src/campus.js`, in metres from the campus origin. Edit that one file and the 2D map, the 3D twin and camera coverage all update.
+
+## Develop
+
+```bash
+npm install
+```
+
+```bash
+npm start
+```
+
+`npm start` builds both editions and starts the hub: the console opens at `http://localhost:8787`, and phones on the same network use the address it prints. Other commands:
+
+| Command | What it does |
+|---|---|
+| `npm run build` | Builds the phone edition into `www/` and the laptop edition into `dist/kavach-laptop/` |
+| `npm run watch` | Rebuilds on save |
+| `npm run hub` | Starts the already-built hub (`PORT=8788` and `KAVACH_DATA=/path` to change port or data folder) |
+| `npm run serve` | Serves the phone edition alone on `http://localhost:8080` (stand-alone, no hub) |
+| `npm test` | Behaviour rules, gate pass verification, and the hub (pairing, sync, permissions, unpairing, saving) |
+| `npm run android:apk` | Builds the APK (needs JDK 21 and the Android SDK); `npm run android:open` opens Android Studio |
+
+Every push builds both editions in GitHub Actions (`.github/workflows/android.yml`) and uploads **kavach-debug-apk** and **kavach-laptop**.
+
+The Android app allows plain `http` to the hub on the local network (`usesCleartextTraffic`, `allowMixedContent`), because the hub runs on a laptop without a certificate. Pairing tokens protect the API; keep the hub on a trusted campus network.
 
 ## Project layout
 
 | Path | Contents |
 |---|---|
-| `src/campus.js` | Campus model: buildings, roads, checkpoints, guard posts, cameras |
-| `src/data.js` | Mock data (student, routes, inventory, alerts, audit log) and helpers |
-| `src/store.js` | Shared state actions and timers (escalation, walk check-ins, CCTV actions) |
-| `src/cctv.jsx` | Camera feeds (simulated, or real when a camera is connected), camera wall tiles, camera viewer |
-| `src/vision/` | On-device AI: model loading (`engine.js`), real cameras and anonymised rendering (`live.js`), tracker, behaviour rules, gate face check, and their UI |
-| `test/` | `npm test`: behaviour rules on scripted movements, and gate pass verification |
-| `src/twin.js` | CesiumJS digital twin, bundled separately into `www/twin.js` and loaded on demand |
-| `src/twinview.jsx` | React wrapper for the twin, layer toggles, command centre |
-| `src/student.jsx`, `src/guard.jsx`, `src/admin.jsx` | The three apps |
-| `src/main.jsx` | App shell: start screen, role switcher, phone frame, side-by-side view |
-| `www/` | Built web app (also what the Android app loads) |
+| `src/phone.jsx` | Phone edition shell: start screen, Student/Guard switch, pairing |
+| `src/laptop.jsx` | Laptop edition: Admin console with sidebar, Cameras, Alerts and Setup pages |
+| `src/student.jsx`, `src/guard.jsx`, `src/admin.jsx` | The apps and admin panels |
+| `src/actions.js` | Named actions (the only way state changes), shared by the apps and the hub |
+| `src/store.js` | The action implementations and timers |
+| `src/useKavach.js`, `src/sync.js`, `src/pair.jsx` | State on the device, hub sync with an outbox, pairing UI |
+| `hub/server.js` | The campus hub (Node, no dependencies) |
+| `laptop/` | Start scripts and README copied into the laptop package |
+| `src/campus.js` | Campus model: OSM boundary and buildings, checkpoints, guard posts, cameras |
+| `src/data.js` | Constants, students, routes, inventory, stats helpers |
+| `src/cctv.jsx` | Camera feeds, camera wall tiles, camera viewer |
+| `src/vision/` | On-device AI: models, live cameras and anonymised rendering, tracker, rules, gate face check, and their UI |
+| `src/twin.js`, `src/twinview.jsx` | CesiumJS digital twin (laptop only, loaded on demand) and its React wrapper |
+| `test/` | `npm test` |
+| `www/` | Built phone edition (what the Android app loads) |
 | `android/` | Capacitor Android project |
 
-`npm run build` rebuilds `www/` (and copies the AI runtime and models into `www/vendor` and `www/models`, which are not committed); `npm run watch` rebuilds on save; `npm test` runs the rule and QR tests.
-
-Built with React 18, Tailwind CSS 3, CesiumJS (`@cesium/engine`), Human (on-device AI), jsQR, Capacitor 7, esbuild and qrcode-generator.
-
-The 3D twin runs fully offline: it has no globe imagery or terrain and needs no Cesium Ion token. The ground is painted from `src/campus.js`.
+Built with React 18, Tailwind CSS 3, CesiumJS (`@cesium/engine`), Human (on-device AI), jsQR, Capacitor 7, esbuild and qrcode-generator. The 3D twin runs fully offline: no globe imagery, terrain or Cesium Ion token.
