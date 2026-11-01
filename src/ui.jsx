@@ -2,8 +2,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import qrcode from 'qrcode-generator';
 import { CP, cls, pad } from './data.js';
-import kleLogo from './assets/kle-logo.webp';
-import kleMark from './assets/kle-mark.webp';
 import { useApp } from './store.js';
 
 const ICONS = {
@@ -78,33 +76,28 @@ export function Icon({ name, className = 'h-5 w-5', sw = 2 }) {
   );
 }
 
-// Kavach product mark: shield on the KLE rounded-square brand shape.
+// Kavach product mark: telemetry-cyan shield on an obsidian tile.
 export function Logo({ className = 'h-8 w-8' }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <rect width="24" height="24" rx="6" fill="#6B170D" />
-      <path d="M12 19.5s6-3 6-7.5V7l-6-2.2L6 7v5c0 4.5 6 7.5 6 7.5z" fill="none" stroke="#F7F1EE" strokeWidth="1.5" strokeLinejoin="round" />
-      <path d="m9.2 11.9 2 2 3.7-3.9" stroke="#BFA682" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x=".5" y=".5" width="23" height="23" rx="6" fill="#060c11" stroke="#00e5ff" strokeOpacity=".45" />
+      <path d="M12 19.5s6-3 6-7.5V7l-6-2.2L6 7v5c0 4.5 6 7.5 6 7.5z" fill="rgba(0,229,255,.1)" stroke="#00e5ff" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="m9.2 11.9 2 2 3.7-3.9" stroke="#10B981" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-// Official KLE Technological University logo (from the brand guidebook). Use on light backgrounds only.
-export function KleLogo({ className = 'h-8', mark }) {
-  return <img src={mark ? kleMark : kleLogo} alt="KLE Technological University" className={cls('w-auto select-none', className)} draggable="false" />;
-}
-
 export const Card = ({ className = '', children, ...p }) => (
-  <div className={cls('rounded-2xl p-4 shadow-sm ring-1', !/(^|\s)bg-(?!gradient)/.test(className) && 'bg-white',
-    !/(^|\s)ring-(?!\d|inset)/.test(className) && 'ring-slate-200/70', className)} {...p}>{children}</div>
+  <div className={cls('rounded-2xl p-4 shadow-[0_12px_36px_rgba(0,0,0,.28)] ring-1', !/(^|\s)bg-(?!gradient)/.test(className) && 'bg-card',
+    !/(^|\s)ring-(?!\d|inset)/.test(className) && 'ring-line', className)} {...p}>{children}</div>
 );
 
 const BTN = {
-  primary: 'bg-brand text-white hover:bg-brand-light active:bg-brand-dark shadow-sm',
-  accent: 'bg-accent text-slate-900 hover:brightness-105 active:brightness-95 shadow-sm',
+  primary: 'bg-brand text-ink hover:bg-brand-light active:bg-brand-dark shadow-[0_0_18px_-6px_rgba(0,229,255,.7)]',
+  accent: 'bg-accent text-ink hover:brightness-110 active:brightness-95 shadow-[0_0_18px_-6px_rgba(0,229,255,.7)]',
   danger: 'bg-red-600 text-white hover:bg-red-500 active:bg-red-700 shadow-sm',
   success: 'bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 shadow-sm',
-  outline: 'bg-white text-brand ring-1 ring-inset ring-sand hover:bg-ivory active:bg-sand/60',
+  outline: 'bg-card text-brand ring-1 ring-inset ring-line hover:bg-raise active:bg-raise',
   soft: 'bg-brand-50 text-brand hover:bg-brand-100 active:bg-brand-100',
   ghost: 'text-brand hover:bg-slate-100',
   dark: 'bg-white/10 text-white ring-1 ring-inset ring-white/20 hover:bg-white/20',
@@ -128,7 +121,7 @@ export function Toggle({ on, onChange, label }) {
   return (
     <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)}
       className={cls('relative h-7 w-12 shrink-0 rounded-full transition-colors', on ? 'bg-emerald-500' : 'bg-slate-300')}>
-      <span className={cls('absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all', on ? 'left-[22px]' : 'left-0.5')} />
+      <span className={cls('absolute top-0.5 h-6 w-6 rounded-full bg-card shadow transition-all', on ? 'left-[22px]' : 'left-0.5')} />
     </button>
   );
 }
@@ -137,12 +130,12 @@ export function Stepper({ value, onChange, max = 99 }) {
   return (
     <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1">
       <button type="button" aria-label="Less" onClick={() => onChange(Math.max(0, value - 1))}
-        className="grid h-8 w-8 place-items-center rounded-lg bg-white text-brand shadow-sm active:scale-95 disabled:opacity-40" disabled={value <= 0}>
+        className="grid h-8 w-8 place-items-center rounded-lg bg-card text-brand shadow-sm active:scale-95 disabled:opacity-40" disabled={value <= 0}>
         <Icon name="minus" className="h-4 w-4" />
       </button>
       <span className="w-8 text-center font-bold tabular-nums">{value}</span>
       <button type="button" aria-label="More" onClick={() => onChange(Math.min(max, value + 1))}
-        className="grid h-8 w-8 place-items-center rounded-lg bg-white text-brand shadow-sm active:scale-95 disabled:opacity-40" disabled={value >= max}>
+        className="grid h-8 w-8 place-items-center rounded-lg bg-card text-brand shadow-sm active:scale-95 disabled:opacity-40" disabled={value >= max}>
         <Icon name="plus" className="h-4 w-4" />
       </button>
     </div>
@@ -152,12 +145,12 @@ export function Stepper({ value, onChange, max = 99 }) {
 export function Sheet({ onClose, title, children, tall }) {
   return (
     <div className="absolute inset-0 z-40 flex flex-col justify-end">
-      <div className="fade-in absolute inset-0 bg-slate-900/50" onClick={onClose} />
-      <div className={cls('sheet relative flex flex-col rounded-t-[28px] bg-white shadow-2xl', tall ? 'max-h-[92%]' : 'max-h-[85%]')}>
+      <div className="fade-in absolute inset-0 bg-ink/50" onClick={onClose} />
+      <div className={cls('sheet relative flex flex-col rounded-t-[28px] bg-card shadow-2xl', tall ? 'max-h-[92%]' : 'max-h-[85%]')}>
         <div className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-slate-300" />
         {title && (
           <div className="flex shrink-0 items-center justify-between px-5 pb-1 pt-3">
-            <h3 className="font-serif text-xl font-semibold text-slate-900">{title}</h3>
+            <h3 className="font-display text-xl font-semibold text-slate-900">{title}</h3>
             <button type="button" aria-label="Close" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200">
               <Icon name="x" className="h-4 w-4" />
             </button>
@@ -169,7 +162,7 @@ export function Sheet({ onClose, title, children, tall }) {
   );
 }
 
-export function Ring({ value, max, size = 48, stroke = 4, color = '#BFA682', track = '#e2e8f0', children, className }) {
+export function Ring({ value, max, size = 48, stroke = 4, color = '#00e5ff', track = 'rgba(112,161,177,.25)', children, className }) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const off = c * (1 - Math.max(0, Math.min(1, value / max)));
@@ -203,9 +196,9 @@ export function QR({ text, size = 200, fade }) {
       <g transform={`translate(${(n - logo) / 2} ${(n - logo) / 2})`} shapeRendering="geometricPrecision">
         <rect width={logo} height={logo} rx={logo * 0.22} fill="#fff" />
         <svg x={logo * 0.1} y={logo * 0.1} width={logo * 0.8} height={logo * 0.8} viewBox="0 0 24 24">
-          <rect width="24" height="24" rx="6" fill="#6B170D" />
-          <path d="M12 19.5s6-3 6-7.5V7l-6-2.2L6 7v5c0 4.5 6 7.5 6 7.5z" fill="none" stroke="#F7F1EE" strokeWidth="1.6" />
-          <path d="m9.2 11.9 2 2 3.7-3.9" stroke="#BFA682" strokeWidth="2.2" fill="none" strokeLinecap="round" />
+          <rect width="24" height="24" rx="6" fill="#05090d" />
+          <path d="M12 19.5s6-3 6-7.5V7l-6-2.2L6 7v5c0 4.5 6 7.5 6 7.5z" fill="none" stroke="#00e5ff" strokeWidth="1.6" />
+          <path d="m9.2 11.9 2 2 3.7-3.9" stroke="#10B981" strokeWidth="2.2" fill="none" strokeLinecap="round" />
         </svg>
       </g>
     </svg>
@@ -214,11 +207,11 @@ export function QR({ text, size = 200, fade }) {
 
 export function Avatar({ size = 48, className }) {
   return (
-    <svg viewBox="0 0 64 64" width={size} height={size} className={cls('shrink-0 rounded-full ring-2 ring-white', className)} role="img" aria-label="Priya Sharma photo">
-      <circle cx="32" cy="32" r="32" fill="#FDE68A" />
+    <svg viewBox="0 0 64 64" width={size} height={size} className={cls('shrink-0 rounded-full ring-2 ring-brand/40', className)} role="img" aria-label="Priya Sharma photo">
+      <circle cx="32" cy="32" r="32" fill="#13303b" />
       <path d="M17 27c-1 10 0 17 4 21l5-3c-3-4-4-10-3-16z" fill="#1f2937" />
       <path d="M47 27c1 10 0 17-4 21l-5-3c3-4 4-10 3-16z" fill="#1f2937" />
-      <path d="M10 64c2-12 11-18 22-18s20 6 22 18z" fill="#6B170D" />
+      <path d="M10 64c2-12 11-18 22-18s20 6 22 18z" fill="#0e7490" />
       <path d="M27 42h10v6a5 5 0 0 1-10 0z" fill="#B97A4E" />
       <ellipse cx="32" cy="30" rx="11" ry="13" fill="#C98B5C" />
       <path d="M20 29c0-11 6-16 12-16s13 5 12 16c-3-6-7-9-12-9.5-2 3-7 7-12 9.5z" fill="#1f2937" />
@@ -235,7 +228,7 @@ export function NightPhoto({ cp, time, className, deleted, cam }) {
   const ts = new Date(time);
   const stamp = `${cam || 'CAM-' + CP[cp].tag.toUpperCase()} · ${pad(ts.getHours())}:${pad(ts.getMinutes())}:${pad(ts.getSeconds())}`;
   return (
-    <div className={cls('relative overflow-hidden rounded-xl bg-slate-900', className)}>
+    <div className={cls('relative overflow-hidden rounded-xl bg-ink', className)}>
       <svg viewBox="0 0 160 100" className={cls('h-full w-full', deleted && 'opacity-30 grayscale')} preserveAspectRatio="xMidYMid slice">
         <defs>
           <radialGradient id={`lamp-${cp}`} cx="0.72" cy="0.18" r="0.6">
@@ -265,7 +258,7 @@ export function NightPhoto({ cp, time, className, deleted, cam }) {
       </div>
       {deleted && (
         <div className="absolute inset-0 grid place-items-center">
-          <span className="flex items-center gap-1 rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-bold text-slate-700"><Icon name="trash" className="h-3 w-3" />Deleted</span>
+          <span className="flex items-center gap-1 rounded-full bg-card/90 px-2 py-0.5 text-[10px] font-bold text-slate-700"><Icon name="trash" className="h-3 w-3" />Deleted</span>
         </div>
       )}
     </div>
@@ -283,7 +276,7 @@ export function ClipPlayer({ cp, cam, onView, label = '10 s clip · faces blurre
     setTimeout(() => { setPlaying(false); setDone(true); }, 10000);
   };
   return (
-    <button type="button" onClick={play} className="group relative block aspect-video w-full overflow-hidden rounded-xl bg-slate-900 text-left">
+    <button type="button" onClick={play} className="group relative block aspect-video w-full overflow-hidden rounded-xl bg-ink text-left">
       <svg viewBox="0 0 160 90" className="h-full w-full" preserveAspectRatio="xMidYMid slice">
         <rect width="160" height="90" fill="#111827" />
         <path d="M0 70 L160 58 L160 90 L0 90Z" fill="#1f2937" />
@@ -302,7 +295,7 @@ export function ClipPlayer({ cp, cam, onView, label = '10 s clip · faces blurre
       </div>
       {!playing && (
         <div className="absolute inset-0 grid place-items-center">
-          <span className="grid h-11 w-11 place-items-center rounded-full bg-white/90 text-brand shadow-lg transition group-hover:scale-105">
+          <span className="grid h-11 w-11 place-items-center rounded-full bg-card/90 text-brand shadow-lg transition group-hover:scale-105">
             <Icon name={done ? 'refresh' : 'play'} className="h-5 w-5" />
           </span>
         </div>
@@ -331,10 +324,10 @@ export function ScanOverlay({ title, subtitle, steps, duration = 2400, mode = 'q
   }, [duration]);
   const per = duration / steps.length;
   return (
-    <div className="fade-in absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/[.96] p-6 text-white">
+    <div className="fade-in absolute inset-0 z-50 flex flex-col items-center justify-center bg-ink/[.96] p-6 text-white">
       <div className="text-xs font-semibold uppercase tracking-[.2em] text-accent">{subtitle}</div>
       <div className="mt-1 text-center text-lg font-bold">{title}</div>
-      <div className="relative mt-6 h-52 w-52 overflow-hidden rounded-3xl bg-slate-900 ring-1 ring-white/10">
+      <div className="relative mt-6 h-52 w-52 overflow-hidden rounded-3xl bg-ink ring-1 ring-white/10">
         {['left-3 top-3 border-l-4 border-t-4 rounded-tl-xl', 'right-3 top-3 border-r-4 border-t-4 rounded-tr-xl', 'left-3 bottom-3 border-l-4 border-b-4 rounded-bl-xl', 'right-3 bottom-3 border-r-4 border-b-4 rounded-br-xl'].map((c) => (
           <span key={c} className={cls('absolute h-8 w-8 border-accent', c)} />
         ))}
@@ -382,7 +375,7 @@ export function ResultSheet({ ok, title, rows = [], note, onClose, actions }) {
         <div className={cls('pop grid h-20 w-20 place-items-center rounded-full', ok ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600')}>
           <Icon name={ok ? 'check' : 'x'} className="h-10 w-10" sw={3} />
         </div>
-        <h3 className={cls('mt-4 font-serif text-[22px] font-semibold', ok ? 'text-slate-900' : 'text-red-700')}>{title}</h3>
+        <h3 className={cls('mt-4 font-display text-[22px] font-semibold', ok ? 'text-slate-900' : 'text-red-700')}>{title}</h3>
         {note && <p className="mt-1 text-sm text-slate-500">{note}</p>}
       </div>
       {rows.length > 0 && (
@@ -405,8 +398,8 @@ export function ResultSheet({ ok, title, rows = [], note, onClose, actions }) {
 const TOAST_STYLE = {
   success: ['bg-emerald-600', 'checkCircle'],
   alert: ['bg-red-600', 'alert'],
-  warn: ['bg-amber-500', 'alert'],
-  info: ['bg-brand', 'bell'],
+  warn: ['bg-amber-600', 'alert'],
+  info: ['bg-[#0b2a35] ring-1 ring-brand/40', 'bell'],
 };
 const ROLE_LABEL = { student: 'Student app', guard: 'Guard app', admin: 'Admin' };
 
@@ -424,7 +417,7 @@ export function Toasts({ role }) {
         const other = t.role !== role;
         return other ? (
           <button key={t.id} type="button" onClick={() => setRole(t.role)}
-            className="toast-in pointer-events-auto flex w-full items-center gap-3 rounded-2xl bg-white/95 p-3 text-left shadow-xl ring-1 ring-slate-200 backdrop-blur">
+            className="toast-in pointer-events-auto flex w-full items-center gap-3 rounded-2xl bg-card/95 p-3 text-left shadow-xl ring-1 ring-slate-200 backdrop-blur">
             <span className={cls('grid h-9 w-9 shrink-0 place-items-center rounded-xl text-white', bg)}><Icon name={ic} className="h-4 w-4" /></span>
             <span className="min-w-0 flex-1">
               <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400">{ROLE_LABEL[t.role]} · tap to open</span>
@@ -444,16 +437,16 @@ export function Toasts({ role }) {
 
 export function BottomNav({ items, value, onChange }) {
   return (
-    <nav className="relative z-20 flex shrink-0 border-t border-slate-200 bg-white/95 px-1.5 pb-[max(6px,env(safe-area-inset-bottom))] pt-1 backdrop-blur">
+    <nav className="relative z-20 flex shrink-0 border-t border-line bg-[#060c11]/95 px-1.5 pb-[max(6px,env(safe-area-inset-bottom))] pt-1 backdrop-blur">
       {items.map((it) => {
         const on = it.id === value;
         return (
           <button key={it.id} type="button" onClick={() => onChange(it.id)} aria-current={on ? 'page' : undefined}
             className={cls('flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[11px] transition', on ? 'font-semibold text-brand' : 'text-slate-500 hover:text-slate-700')}>
-            <span className={cls('relative grid h-8 w-12 place-items-center rounded-full transition', on && 'bg-brand-100')}>
+            <span className={cls('relative grid h-8 w-12 place-items-center rounded-full transition', on && 'bg-brand-100 ring-1 ring-brand/30')}>
               <Icon name={it.icon} className="h-5 w-5" sw={on ? 2.3 : 2} />
-              {it.badge > 0 && <span className="absolute -right-0.5 -top-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white ring-2 ring-white">{it.badge}</span>}
-              {it.dot && <span className="absolute right-1 top-0.5 h-2.5 w-2.5 rounded-full bg-accent ring-2 ring-white blink" />}
+              {it.badge > 0 && <span className="absolute -right-0.5 -top-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white ring-2 ring-brand/40">{it.badge}</span>}
+              {it.dot && <span className="absolute right-1 top-0.5 h-2.5 w-2.5 rounded-full bg-accent ring-2 ring-brand/40 blink" />}
             </span>
             {it.label}
           </button>
@@ -465,14 +458,14 @@ export function BottomNav({ items, value, onChange }) {
 
 export function ScreenHeader({ title, sub, right, onBack }) {
   return (
-    <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-200/70 bg-slate-50/90 px-4 py-3 backdrop-blur">
+    <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-ink/85 px-4 py-3 backdrop-blur">
       {onBack && (
-        <button type="button" aria-label="Back" onClick={onBack} className="grid h-9 w-9 place-items-center rounded-full bg-white text-slate-700 shadow-sm ring-1 ring-slate-200">
+        <button type="button" aria-label="Back" onClick={onBack} className="grid h-9 w-9 place-items-center rounded-full bg-card text-slate-700 shadow-sm ring-1 ring-slate-200">
           <Icon name="chevL" className="h-5 w-5" />
         </button>
       )}
       <div className="min-w-0 flex-1">
-        <h1 className="truncate font-serif text-[22px] font-semibold text-slate-900">{title}</h1>
+        <h1 className="truncate font-display text-[20px] font-bold uppercase tracking-[.06em] text-slate-900">{title}</h1>
         {sub && <p className="truncate text-xs text-slate-500">{sub}</p>}
       </div>
       {right}

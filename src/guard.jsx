@@ -8,6 +8,8 @@ import {
 import CampusMap from './map.jsx';
 import { CAMERAS } from './campus.js';
 import { CamTile, CameraViewer } from './cctv.jsx';
+import { AiExplain, CamConnect } from './vision/ui.jsx';
+import { isLive } from './vision/live.js';
 import { Badge, BottomNav, Btn, Card, ClipPlayer, DemoPanel, Icon, LiveDot, NightPhoto, SectionTitle, Toggle } from './ui.jsx';
 
 const byPriority = (a, b) => PRI[ALERT_TYPES[a.type].pri].rank - PRI[ALERT_TYPES[b.type].pri].rank || b.time - a.time;
@@ -23,7 +25,7 @@ export default function GuardApp() {
 
   return (
     <>
-      <div className="shrink-0 bg-brand px-4 pb-3 pt-3 text-white">
+      <div className="shrink-0 border-b border-line bg-[#060c11] px-4 pb-3 pt-3 text-white">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-xs font-medium text-white/65">Guard console</div>
@@ -35,8 +37,8 @@ export default function GuardApp() {
         <div className="mt-2 flex gap-1.5" role="tablist" aria-label="Switch guard">
           {s.guards.map((x) => (
             <button key={x.id} type="button" onClick={() => setMe(x.id)}
-              className={cls('flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition', me === x.id ? 'bg-accent text-slate-900' : 'bg-white/10 text-white/80 hover:bg-white/20')}>
-              <span className={cls('grid h-4 w-4 place-items-center rounded-full text-[9px]', me === x.id ? 'bg-slate-900 text-accent' : 'bg-white/20')}>{x.name[0]}</span>
+              className={cls('flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition', me === x.id ? 'bg-accent text-ink' : 'bg-white/10 text-white/80 hover:bg-white/20')}>
+              <span className={cls('grid h-4 w-4 place-items-center rounded-full text-[9px]', me === x.id ? 'bg-ink text-accent' : 'bg-white/20')}>{x.name[0]}</span>
               {x.name}
             </button>
           ))}
@@ -81,7 +83,7 @@ function AlertFeed({ me, openCam }) {
       <div className="flex gap-2">
         {[['open', `Open (${open.length})`], ['done', `Resolved (${done.length})`]].map(([k, l]) => (
           <button key={k} type="button" onClick={() => setFilter(k)}
-            className={cls('rounded-full px-3.5 py-1.5 text-sm font-semibold transition', filter === k ? 'bg-brand text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200')}>{l}</button>
+            className={cls('rounded-full px-3.5 py-1.5 text-sm font-semibold transition', filter === k ? 'bg-brand text-ink' : 'bg-card text-slate-600 ring-1 ring-slate-200')}>{l}</button>
         ))}
       </div>
       {list.length === 0 && (
@@ -112,7 +114,7 @@ export function AlertCard({ a, me, compact, openCam }) {
   return (
     <Card className={cls('fade-up overflow-hidden p-0', a.status === 'new' && !resolved && (T.pri === 'medium' ? 'ring-2 ring-amber-300' : 'ring-2 ring-red-300'), resolved && 'opacity-80')}>
       {a.escalated && !resolved && (
-        <div className="flex items-center gap-2 bg-amber-500 px-4 py-1.5 text-xs font-bold text-slate-900"><Icon name="alert" className="h-4 w-4" />Escalated to Security Head</div>
+        <div className="flex items-center gap-2 bg-amber-500 px-4 py-1.5 text-xs font-bold text-ink"><Icon name="alert" className="h-4 w-4" />Escalated to Security Head</div>
       )}
       <div className="p-4">
         <div className="flex items-start gap-3">
@@ -131,8 +133,9 @@ export function AlertCard({ a, me, compact, openCam }) {
         </div>
 
         <p className="mt-3 text-sm text-slate-700">{a.detail}</p>
+        <AiExplain a={a} />
 
-        {!compact && (
+        {!compact && !a.ai && (
           <div className={cls('mt-3 grid gap-2', a.photo ? 'grid-cols-2' : 'grid-cols-1')}>
             {a.photo && (
               <button type="button" className="text-left" onClick={() => logView('Viewed Saathi Walk last-seen photo')}>
@@ -149,7 +152,7 @@ export function AlertCard({ a, me, compact, openCam }) {
 
         <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
           {a.cam && openCam && (
-            <button type="button" onClick={() => openCam(a.cam)} className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-2 py-0.5 font-semibold text-white">
+            <button type="button" onClick={() => openCam(a.cam)} className="inline-flex items-center gap-1 rounded-full bg-ink px-2 py-0.5 font-semibold text-white">
               <span className={cls('h-1.5 w-1.5 rounded-full', s.cams[a.cam].status === 'online' ? 'bg-red-500 blink' : 'bg-slate-400')} />Live {a.cam}
             </button>
           )}
@@ -159,7 +162,7 @@ export function AlertCard({ a, me, compact, openCam }) {
         </div>
 
         {a.speaker && (
-          <div className="fade-up mt-3 flex items-start gap-2 rounded-xl bg-slate-900 p-3 text-sm text-white">
+          <div className="fade-up mt-3 flex items-start gap-2 rounded-xl bg-ink p-3 text-sm text-white">
             <Icon name="speaker" className="mt-0.5 h-4 w-4 text-accent" />
             <span>"You are being recorded. Security is on the way."<span className="block text-[11px] text-slate-400">Played on area speaker at {fmtTime(a.speakerAt)}</span></span>
           </div>
@@ -167,7 +170,7 @@ export function AlertCard({ a, me, compact, openCam }) {
 
         {a.status === 'accepted' && acc && (
           <div className="fade-up mt-3 flex items-center gap-3 rounded-xl bg-brand-50 p-3 text-sm text-brand">
-            <span className="grid h-9 w-9 place-items-center rounded-full bg-brand text-white"><Icon name="nav" className="h-4 w-4" /></span>
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-brand text-ink"><Icon name="nav" className="h-4 w-4" /></span>
             <span className="flex-1"><b>{acc.name}</b> navigating to {cp.name}<span className="block text-xs text-slate-600">{a.dist} m · about {Math.max(1, Math.ceil(a.dist / 80))} min · accepted {fmtTime(a.acceptedAt)}</span></span>
           </div>
         )}
@@ -197,7 +200,7 @@ export function AlertCard({ a, me, compact, openCam }) {
 function StatusBadge({ a }) {
   if (a.status === 'resolved') return <Badge className="bg-emerald-100 text-emerald-700">Resolved</Badge>;
   if (a.status === 'accepted') return <Badge className="bg-brand-100 text-brand">Accepted</Badge>;
-  return <Badge className="bg-red-600 text-white"><span className="h-1.5 w-1.5 rounded-full bg-white blink" />New</Badge>;
+  return <Badge className="bg-red-600 text-white"><span className="h-1.5 w-1.5 rounded-full bg-card blink" />New</Badge>;
 }
 
 function MapTab({ me, openCam }) {
@@ -214,7 +217,7 @@ function MapTab({ me, openCam }) {
           <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-red-600" />Alert</span>
           <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-amber-500" />Warning</span>
           <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-blue-600" />Guard</span>
-          <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-[#C9A227]" />Saathi Walk</span>
+          <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />Saathi Walk</span>
           <span className="flex items-center gap-1"><span className="grid h-3 w-3 place-items-center rounded border border-brand text-[6px] font-bold text-brand">A</span>Checkpoint</span>
           <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-accent-dark" />Camera</span>
           <span className="ml-auto flex items-center gap-1.5">Cameras <Toggle on={showCams} onChange={setShowCams} label="Show cameras" /></span>
@@ -230,7 +233,7 @@ function MapTab({ me, openCam }) {
           <SectionTitle>Tap a red dot or pick an alert</SectionTitle>
           {open.length === 0 && <Card className="text-center text-sm text-slate-500">No open alerts on campus.</Card>}
           {open.map((a) => (
-            <button key={a.id} type="button" onClick={() => setSel(a.id)} className="flex w-full items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-sm ring-1 ring-slate-200/70">
+            <button key={a.id} type="button" onClick={() => setSel(a.id)} className="flex w-full items-center gap-3 rounded-2xl bg-card p-3 text-left shadow-sm ring-1 ring-slate-200/70">
               <span className={cls('grid h-9 w-9 place-items-center rounded-xl', PRI[ALERT_TYPES[a.type].pri].tile)}><Icon name={ALERT_TYPES[a.type].icon} className="h-4 w-4" /></span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-slate-900">{ALERT_TYPES[a.type].label}</span>
@@ -253,9 +256,10 @@ function CamerasTab({ openCam }) {
   const alertCams = new Set(s.alerts.filter((a) => a.status !== 'resolved' && a.cam).map((a) => a.cam));
   const zones = [['all', 'All'], ['alert', 'With alerts'], ['GATE', 'Gate'], ['B', 'Paths'], ['D', 'Hostel'], ['WALL', 'Wall']];
   const list = CAMERAS.filter((c) => zone === 'all' || (zone === 'alert' ? alertCams.has(c.id) : c.cp === zone))
-    .sort((a, b) => Number(alertCams.has(b.id)) - Number(alertCams.has(a.id)) || (s.cams[a.id].status === 'online') - (s.cams[b.id].status === 'online'));
+    .sort((a, b) => Number(isLive(b.id)) - Number(isLive(a.id)) || Number(alertCams.has(b.id)) - Number(alertCams.has(a.id)) || (s.cams[a.id].status === 'online') - (s.cams[b.id].status === 'online'));
   return (
     <div className="space-y-3 p-4 pb-8">
+      <CamConnect />
       <div className="grid grid-cols-3 gap-2">
         {[['online', 'Live', 'text-emerald-600'], ['offline', 'Offline', 'text-slate-500'], ['tampered', 'Tampered', 'text-amber-600']].map(([k, l, c]) => (
           <Card key={k} className="px-3 py-2.5 text-center"><div className={cls('text-2xl font-extrabold', c)}>{counts[k]}</div><div className="text-[11px] font-medium text-slate-500">{l}</div></Card>
@@ -263,7 +267,7 @@ function CamerasTab({ openCam }) {
       </div>
       <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
         {zones.map(([k, l]) => (
-          <button key={k} type="button" onClick={() => setZone(k)} className={cls('shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold', zone === k ? 'bg-brand text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200')}>{l}</button>
+          <button key={k} type="button" onClick={() => setZone(k)} className={cls('shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold', zone === k ? 'bg-brand text-ink' : 'bg-card text-slate-600 ring-1 ring-slate-200')}>{l}</button>
         ))}
       </div>
       {list.length === 0 && <Card className="text-center text-sm text-slate-500">No cameras here.</Card>}
@@ -318,7 +322,7 @@ function PriyaWalk({ w, now }) {
   return (
     <Card className="p-3 ring-2 ring-accent/60">
       <div className="flex items-center gap-3">
-        <span className="grid h-10 w-10 place-items-center rounded-full bg-accent font-bold text-slate-900">P</span>
+        <span className="grid h-10 w-10 place-items-center rounded-full bg-accent font-bold text-ink">P</span>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-slate-900">Priya S. → {ROUTES[w.dest].dest}</div>
           <div className="text-xs text-slate-500">{w.phase === 'arrived' ? `Arrived ${fmtTime(w.arrivedAt)} · photos deleted` : `Last: ${cpShort(last.cp)} ${fmtTime(last.time)} · next: ${next ? cpShort(next.cp) : '-'}`}</div>
@@ -355,7 +359,7 @@ function DemoTab() {
         <div className="grid grid-cols-2 gap-2">
           {triggers.map((x) => (
             <button key={x.k} type="button" onClick={() => mutate(x.run)}
-              className="flex flex-col items-start gap-2 rounded-2xl bg-white p-3 text-left shadow-sm ring-1 ring-slate-200 transition hover:ring-brand active:scale-[.98]">
+              className="flex flex-col items-start gap-2 rounded-2xl bg-card p-3 text-left shadow-sm ring-1 ring-slate-200 transition hover:ring-brand active:scale-[.98]">
               <span className="grid h-9 w-9 place-items-center rounded-xl bg-red-50 text-red-600"><Icon name={x.icon} className="h-5 w-5" /></span>
               <span className="text-sm font-semibold leading-tight text-slate-900">{x.t}</span>
               <span className="text-[11px] text-slate-500">{x.d}</span>

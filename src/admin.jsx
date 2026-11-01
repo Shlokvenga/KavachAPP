@@ -5,6 +5,7 @@ import { audit, equipmentLeaving, toast, useApp, visitorWrongZone } from './stor
 import { CAMERAS } from './campus.js';
 import { CAM_STATUS, CameraFeed, CameraViewer } from './cctv.jsx';
 import { CommandCentre, LayerChips, Twin, heatFor, twinData } from './twinview.jsx';
+import { AiAdminCard } from './vision/ui.jsx';
 import { Badge, BottomNav, Btn, Card, DemoPanel, Icon, LiveDot, QR, Ring, SectionTitle, Sheet, useFastNow } from './ui.jsx';
 
 export default function AdminApp() {
@@ -16,11 +17,11 @@ export default function AdminApp() {
   const low = s.inventory.filter((i) => i.kind === 'consumable' && i.stock < i.min).length;
   return (
     <>
-      <div className="shrink-0 bg-brand px-4 pb-3 pt-3 text-white">
+      <div className="shrink-0 border-b border-line bg-[#060c11] px-4 pb-3 pt-3 text-white">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-xs font-medium text-white/65">{COLLEGE}</div>
-            <div className="font-serif text-xl font-semibold">Admin dashboard</div>
+            <div className="font-display text-xl font-semibold">Admin dashboard</div>
           </div>
           <Badge className="bg-white/10 text-white"><LiveDot />Live</Badge>
         </div>
@@ -49,7 +50,7 @@ export default function AdminApp() {
 function Stat({ icon, label, value, tone = 'brand', sub, onClick }) {
   const tones = { brand: 'bg-brand-100 text-brand', red: 'bg-red-100 text-red-600', amber: 'bg-amber-100 text-amber-700', green: 'bg-emerald-100 text-emerald-700', violet: 'bg-violet-100 text-violet-700' };
   return (
-    <button type="button" onClick={onClick} className="rounded-2xl bg-white p-3.5 text-left shadow-sm ring-1 ring-slate-200/70 transition hover:shadow-md">
+    <button type="button" onClick={onClick} className="rounded-2xl bg-card p-3.5 text-left shadow-sm ring-1 ring-slate-200/70 transition hover:shadow-md">
       <span className={cls('grid h-9 w-9 place-items-center rounded-xl', tones[tone])}><Icon name={icon} className="h-5 w-5" /></span>
       <span className="mt-2 block text-2xl font-extrabold tabular-nums text-slate-900">{value}</span>
       <span className="block text-xs font-medium text-slate-500">{label}</span>
@@ -79,14 +80,16 @@ function Overview({ go, openCam, openCc }) {
         <Stat icon="badge" label="Visitors on campus" value={visitors} onClick={() => go('visitors')} />
       </div>
 
-      <button type="button" onClick={openCc} className="flex w-full items-center gap-4 rounded-3xl bg-gradient-to-br from-brand to-[#3D0D08] p-4 text-left text-white shadow-md active:scale-[.99]">
+      <button type="button" onClick={openCc} className="flex w-full items-center gap-4 rounded-3xl bg-gradient-to-br from-[#0b2a35] to-[#060c11] ring-1 ring-brand/25 p-4 text-left text-white shadow-md active:scale-[.99]">
         <span className="grid h-12 w-12 place-items-center rounded-2xl bg-white/10"><Icon name="map" className="h-6 w-6 text-accent" /></span>
         <span className="flex-1">
-          <span className="block font-serif text-lg font-semibold">Open command centre</span>
+          <span className="block font-display text-lg font-semibold">Open command centre</span>
           <span className="block text-sm text-white/75">3D digital twin, camera wall and live alerts, full screen</span>
         </span>
         <Icon name="chevR" />
       </button>
+
+      <AiAdminCard />
 
       <Card>
         <div className="flex items-center justify-between">
@@ -95,7 +98,7 @@ function Overview({ go, openCam, openCc }) {
         </div>
         <div className="mt-3 grid grid-cols-4 gap-2 text-center">
           {[[counts.offline, 'Offline', 'text-slate-600'], [counts.tampered, 'Tampered', 'text-amber-600'], [s.camEvents.toLocaleString('en-IN'), 'AI events today', 'text-slate-900'], [s.darkSpots.length, 'Student reports', 'text-brand']].map(([v, k, c]) => (
-            <div key={k} className="rounded-xl bg-ivory px-1 py-2"><div className={cls('text-lg font-extrabold', c)}>{v}</div><div className="text-[10px] leading-tight text-slate-500">{k}</div></div>
+            <div key={k} className="rounded-xl bg-raise px-1 py-2"><div className={cls('text-lg font-extrabold', c)}>{v}</div><div className="text-[10px] leading-tight text-slate-500">{k}</div></div>
           ))}
         </div>
         {issues.length > 0 && (
@@ -233,7 +236,7 @@ function VisitorPass({ v, onClose }) {
   return (
     <Sheet title="Visitor pass" onClose={onClose}>
       <div className="flex flex-col items-center">
-        <div className="w-full rounded-2xl bg-gradient-to-r from-brand to-[#3D0D08] p-4 text-white">
+        <div className="w-full rounded-2xl bg-gradient-to-r from-[#0b2a35] to-[#060c11] p-4 text-white ring-1 ring-brand/25">
           <div className="text-xs text-white/65">Temporary pass · {v.id}</div>
           <div className="text-lg font-bold">{v.name}</div>
           <div className="text-sm text-white/80">{v.purpose} · {v.dest}</div>
@@ -320,7 +323,7 @@ function StockReport({ onClose }) {
           <div className="text-xs text-slate-500">Generated {fmtDay(now, now)} {new Date(now).toLocaleDateString('en-IN')}, {fmtTime(now)} by Kavach</div>
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
             {[[s.inventory.length, 'Items verified'], [2, 'RFID located'], [short.length, 'Short returns']].map(([v, k]) => (
-              <div key={k} className="rounded-xl bg-white p-2 ring-1 ring-slate-200"><div className="text-lg font-extrabold text-slate-900">{v}</div><div className="text-[10px] text-slate-500">{k}</div></div>
+              <div key={k} className="rounded-xl bg-card p-2 ring-1 ring-slate-200"><div className="text-lg font-extrabold text-slate-900">{v}</div><div className="text-[10px] text-slate-500">{k}</div></div>
             ))}
           </div>
           <table className="mt-3 w-full text-xs">
@@ -378,7 +381,7 @@ function TwinTab({ openCam, openCc }) {
             {[['overview', 'Reset'], ['top', 'Top']].map(([k, l]) => (
               <button key={k} type="button" onClick={() => api.current && api.current.view(k)} className="rounded-full bg-black/55 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/15">{l}</button>
             ))}
-            <button type="button" onClick={openCc} aria-label="Full screen" className="grid h-7 w-7 place-items-center rounded-full bg-accent text-slate-900"><Icon name="columns" className="h-3.5 w-3.5" /></button>
+            <button type="button" onClick={openCc} aria-label="Full screen" className="grid h-7 w-7 place-items-center rounded-full bg-accent text-ink"><Icon name="columns" className="h-3.5 w-3.5" /></button>
           </div>
         </div>
         {selCam ? (
@@ -400,7 +403,7 @@ function TwinTab({ openCam, openCc }) {
                 <span className="font-semibold text-slate-900">{CP[id].name}</span>
                 <span className="tabular-nums text-slate-600"><b className="text-slate-900">{n}</b>{live[id] ? <span className="ml-1 text-xs font-semibold text-red-600">+{live[id]} today</span> : null}</span>
               </div>
-              <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100"><div className="grow h-full rounded-full bg-gradient-to-r from-accent to-klered" style={{ width: `${(n / max) * 100}%` }} /></div>
+              <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100"><div className="grow h-full rounded-full bg-gradient-to-r from-accent to-coral" style={{ width: `${(n / max) * 100}%` }} /></div>
               <div className="mt-0.5 text-[11px] text-slate-500">Mostly: {top[id]} · last 30 days + live</div>
             </div>
           ))}
@@ -423,7 +426,7 @@ function Audit() {
   const month = new Date(now).toLocaleDateString('en-IN', { month: 'long' });
   return (
     <div className="space-y-4 p-4 pb-8">
-      <div className="rounded-3xl bg-gradient-to-br from-brand to-[#3D0D08] p-5 text-white shadow-md">
+      <div className="rounded-3xl bg-gradient-to-br from-[#0b2a35] to-[#060c11] ring-1 ring-brand/25 p-5 text-white shadow-md">
         <div className="text-xs font-bold uppercase tracking-wider text-accent">Transparency · {month}</div>
         <p className="mt-2 text-lg font-bold leading-snug">{m.walks} walks, {m.followers} follower alerts, {m.faceSearches} face searches, {m.unblurs} unblurs reviewed by the student committee.</p>
         <div className="mt-4 grid grid-cols-4 gap-2 text-center">
@@ -437,7 +440,7 @@ function Audit() {
         <SectionTitle>Audit log</SectionTitle>
         <div className="mb-2 flex gap-2 overflow-x-auto no-scrollbar">
           {[['all', 'All'], ['footage', 'Footage'], ['lookup', 'Lookups'], ['system', 'System']].map(([k, l]) => (
-            <button key={k} type="button" onClick={() => setCat(k)} className={cls('shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold', cat === k ? 'bg-brand text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200')}>{l}</button>
+            <button key={k} type="button" onClick={() => setCat(k)} className={cls('shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold', cat === k ? 'bg-brand text-ink' : 'bg-card text-slate-600 ring-1 ring-slate-200')}>{l}</button>
           ))}
         </div>
         <Card className="divide-y divide-slate-100 p-0">

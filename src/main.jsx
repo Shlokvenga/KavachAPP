@@ -1,9 +1,11 @@
 // App shell: start screen, role switcher, phone frame(s), shared state and timers.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { STUDENT, cls, makeInitial, pad } from './data.js';
-import { AppCtx, tick, toast, useApp } from './store.js';
-import { Avatar, Btn, Icon, KleLogo, Logo, Toasts } from './ui.jsx';
+import { STUDENT, camById, cls, makeInitial, pad, verifyQr } from './data.js';
+import { AppCtx, aiEvent, gateQr, tick, toast, useApp } from './store.js';
+import { configureLive } from './vision/live.js';
+import { loadTemplate, verify } from './vision/face.js';
+import { Avatar, Btn, Icon, Logo, Toasts } from './ui.jsx';
 import { CAMPUS_SHORT } from './campus.js';
 import StudentApp from './student.jsx';
 import GuardApp from './guard.jsx';
@@ -50,6 +52,29 @@ function App() {
   useEffect(() => {
     const id = setInterval(() => { setNow(Date.now()); mutate(tick); }, 1000);
     return () => clearInterval(id);
+  }, [mutate]);
+
+  // Real cameras feed the same shared state as the simulated ones.
+  const stateRef = useRef(s);
+  stateRef.current = s;
+  useEffect(() => {
+    configureLive({
+      onEvent: (camId, ev, snap) => mutate((d) => aiEvent(d, camId, ev, snap)),
+      onQr: async (camId, text, slot) => {
+        let face = null;
+        const q = verifyQr(text);
+        if (q.ok && loadTemplate(q.id)) face = await verify(slot.video, q.id).catch(() => null);
+        mutate((d) => gateQr(d, camId, text, face));
+      },
+      ctx: () => {
+        const st = stateRef.current;
+        return {
+          // coverage to compute: a camera near an open alert analyses more frames
+          investigate: (camId) => { const cam = camById(camId); return st.alerts.some((a) => a.status !== 'resolved' && (a.cam === camId || a.cp === cam.cp)); },
+          scansSince: (sec) => st.gate.log.filter((l) => l.dir === 'IN' && Date.now() - l.time <= sec * 1000).length,
+        };
+      },
+    });
   }, [mutate]);
 
   const ctx = useMemo(() => ({ s, mutate, now, role, setRole, split: splitOn, reset }), [s, mutate, now, role, setRole, splitOn, reset]);
@@ -103,7 +128,7 @@ function Phone({ framed, role, children }) {
     <div data-phone={role} className="flex h-full w-full flex-col overflow-hidden bg-slate-50">
       {framed && <StatusBar dark={role !== 'start' && role !== 'student'} />}
       {showBar && (
-        <div className="flex shrink-0 items-center gap-2 bg-brand-dark px-3 py-1.5 pt-[max(6px,env(safe-area-inset-top))]">
+        <div className="flex shrink-0 items-center gap-2 border-b border-line bg-[#060c11] px-3 py-1.5 pt-[max(6px,env(safe-area-inset-top))]">
           <Logo className="h-6 w-6" />
           <RoleSwitch value={role} onChange={setRole} compact />
           <button type="button" onClick={reset} aria-label="Reset demo" className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white"><Icon name="refresh" className="h-4 w-4" /></button>
@@ -122,10 +147,10 @@ function Phone({ framed, role, children }) {
   );
   if (!framed) return <div className="h-[100dvh] w-full">{inner}</div>;
   return (
-    <div className="relative shrink-0 rounded-[48px] bg-slate-900 p-[10px] shadow-[0_30px_60px_-20px_rgba(15,23,42,.45)] ring-1 ring-black/20"
+    <div className="relative shrink-0 rounded-[48px] bg-black p-[10px] shadow-[0_30px_80px_-20px_rgba(0,229,255,.18)] ring-1 ring-line"
       style={{ width: 384, height: 'min(820px, calc(100vh - 104px))', minHeight: 640 }}>
       <div className="h-full w-full overflow-hidden rounded-[38px]">{inner}</div>
-      <div className="pointer-events-none absolute left-1/2 top-[18px] z-[80] h-[24px] w-[92px] -translate-x-1/2 rounded-full bg-slate-900" />
+      <div className="pointer-events-none absolute left-1/2 top-[18px] z-[80] h-[24px] w-[92px] -translate-x-1/2 rounded-full bg-ink" />
     </div>
   );
 }
@@ -134,7 +159,7 @@ function StatusBar({ dark }) {
   const { now } = useApp();
   const d = new Date(now);
   return (
-    <div className={cls('relative z-[75] flex h-11 shrink-0 items-center justify-between px-7 pt-1 text-[13px] font-semibold', dark ? 'bg-brand text-white' : 'bg-slate-50 text-slate-900')}>
+    <div className={cls('relative z-[75] flex h-11 shrink-0 items-center justify-between px-7 pt-1 text-[13px] font-semibold', dark ? 'bg-[#060c11] text-white' : 'bg-slate-50 text-slate-900')}>
       <span className="tabular-nums">{d.getHours() % 12 || 12}:{pad(d.getMinutes())}</span>
       <span className="flex items-center gap-1.5">
         <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor" aria-hidden="true"><rect x="0" y="7" width="3" height="4" rx="1" /><rect x="4.5" y="5" width="3" height="6" rx="1" /><rect x="9" y="2.5" width="3" height="8.5" rx="1" /><rect x="13.5" y="0" width="3" height="11" rx="1" /></svg>
@@ -147,14 +172,14 @@ function StatusBar({ dark }) {
 
 function RoleSwitch({ value, onChange, compact, light }) {
   return (
-    <div className={cls('flex flex-1 rounded-full p-1', light ? 'bg-slate-200/80' : 'bg-white/10')} role="tablist" aria-label="Switch role">
+    <div className={cls('flex flex-1 rounded-full p-1 ring-1 ring-line', light ? 'bg-card' : 'bg-white/5')} role="tablist" aria-label="Switch role">
       {ROLES.map((r) => {
         const on = r.id === value;
         return (
           <button key={r.id} type="button" role="tab" aria-selected={on} onClick={() => onChange(r.id)}
             className={cls('flex flex-1 items-center justify-center gap-1.5 rounded-full font-semibold transition',
               compact ? 'h-7 text-xs' : 'h-10 text-sm',
-              on ? (light ? 'bg-white text-brand shadow' : 'bg-accent text-slate-900') : (light ? 'text-slate-600 hover:text-slate-900' : 'text-slate-300 hover:text-white'))}>
+              on ? 'bg-brand text-ink shadow-[0_0_14px_-4px_rgba(0,229,255,.8)]' : 'text-slate-500 hover:text-slate-900')}>
             {!compact && <Icon name={r.icon} className="h-4 w-4" />}{r.label}
           </button>
         );
@@ -167,27 +192,26 @@ function StartScreen({ onOpen }) {
   const [pick, setPick] = useState('student');
   const r = ROLES.find((x) => x.id === pick);
   return (
-    <div className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto bg-gradient-to-b from-brand via-brand to-[#3D0D08] text-white">
+    <div className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto bg-gradient-to-b from-[#0a2029] via-ink to-ink text-white">
       <div className="px-5 pt-4"><RoleSwitch value={pick} onChange={setPick} /></div>
-      <div className="mx-5 mt-4 flex items-center justify-center rounded-2xl bg-white px-4 py-2.5 shadow-lg"><KleLogo className="h-8" /></div>
       <div className="flex flex-col items-center px-6 pt-7 text-center">
         <div className="relative">
-          <span className="pulse-soft absolute inset-0 rounded-[26px] bg-accent/40" />
-          <div className="relative grid h-24 w-24 place-items-center rounded-[26px] bg-white/10 p-3 shadow-2xl ring-1 ring-white/20"><Logo className="h-full w-full" /></div>
+          <span className="pulse-soft absolute inset-0 rounded-[26px] bg-brand/30" />
+          <div className="relative grid h-24 w-24 place-items-center rounded-[26px] bg-ink p-2 shadow-[0_0_40px_-8px_rgba(0,229,255,.6)] ring-1 ring-brand/40"><Logo className="h-full w-full" /></div>
         </div>
-        <h1 className="mt-5 font-serif text-[44px] font-semibold leading-none tracking-tight">Kavach</h1>
+        <h1 className="mt-5 font-display text-[44px] font-bold uppercase leading-none tracking-[.08em]">Kavach</h1>
         <p className="mt-2 text-sm font-medium text-white/80">Smart campus safety and asset protection</p>
-        <p className="mt-4 font-serif text-[17px] italic text-accent">Identify at the doors, anonymous in between.</p>
+        <p className="mt-4 font-mono text-[12px] uppercase tracking-[.12em] text-brand">Identify at the doors · anonymous in between</p>
       </div>
 
       <div className="mt-7 px-5">
-        <div key={pick} className="fade-up rounded-3xl bg-ivory p-5 text-slate-900 shadow-xl">
+        <div key={pick} className="fade-up rounded-3xl bg-card p-5 text-slate-900 shadow-xl ring-1 ring-line">
           <div className="flex items-center gap-3">
-            {pick === 'student' ? <Avatar size={52} className="ring-sand" /> : (
-              <span className="grid h-[52px] w-[52px] place-items-center rounded-2xl bg-brand text-white"><Icon name={r.icon} className="h-6 w-6" /></span>
+            {pick === 'student' ? <Avatar size={52} className="ring-line" /> : (
+              <span className="grid h-[52px] w-[52px] place-items-center rounded-2xl bg-brand text-ink"><Icon name={r.icon} className="h-6 w-6" /></span>
             )}
             <div>
-              <div className="font-serif text-xl font-semibold">{r.title}</div>
+              <div className="font-display text-xl font-semibold">{r.title}</div>
               <div className="text-xs text-slate-500">{r.who}</div>
             </div>
           </div>
@@ -220,10 +244,9 @@ function TopBar({ started, setStarted, split, setSplit, canSplit }) {
       <button type="button" onClick={() => { setStarted(false); setSplit(false); }} className="flex items-center gap-2.5 text-left">
         <Logo className="h-9 w-9" />
         <span>
-          <span className="block font-serif text-xl font-semibold leading-none text-brand">Kavach</span>
+          <span className="block font-display text-xl font-bold uppercase leading-none tracking-[.08em] text-brand">Kavach</span>
           <span className="block text-[11px] font-medium text-slate-500">Identify at the doors, anonymous in between.</span>
         </span>
-        <span className="ml-2 hidden border-l border-sand pl-3 xl:block"><KleLogo className="h-7" /></span>
       </button>
       <div className="mx-auto w-full max-w-[360px]">
         {!split && <RoleSwitch value={started ? role : null} onChange={setRole} light />}
@@ -251,9 +274,9 @@ function DemoGuide() {
   const { setRole } = useApp();
   return (
     <aside className="sticky top-4 hidden w-[280px] shrink-0 lg:block">
-      <div className="rounded-3xl bg-white/80 p-5 shadow-sm ring-1 ring-slate-200 backdrop-blur">
-        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-accent-dark"><Icon name="zap" className="h-4 w-4" />5-minute demo</div>
-        <div className="mt-2 font-serif text-lg font-semibold text-slate-900">Kavach at {CAMPUS_SHORT}</div>
+      <div className="rounded-3xl bg-card/80 p-5 shadow-sm ring-1 ring-line backdrop-blur">
+        <div className="flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-wider text-brand"><Icon name="zap" className="h-4 w-4" />5-minute demo</div>
+        <div className="mt-2 font-display text-lg font-bold text-slate-900">Kavach at {CAMPUS_SHORT}</div>
         <ol className="mt-3 space-y-3">
           {GUIDE.map(([r, t, d], i) => (
             <li key={t}>

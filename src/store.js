@@ -3,8 +3,9 @@
 // Each action below receives a draft (a fresh clone) and mutates it.
 import { createContext, useContext } from 'react';
 import {
-  ALERT_TYPES, CP, ESCALATE_MS, MIN, ROUTES, STUDENT, camById, camsAt, cpShort, distM, fmtTime, randInt,
+  ALERT_TYPES, CP, ESCALATE_MS, MIN, ROUTES, STUDENT, camById, camsAt, cpShort, distM, fmtTime, randInt, verifyQr,
 } from './data.js';
+import { RULES } from './vision/rules.js';
 
 export const AppCtx = createContext(null);
 export const useApp = () => useContext(AppCtx);
@@ -388,4 +389,65 @@ export function raiseDispute(d, label, reason) {
   audit(d, `Priya Sharma (${STUDENT.id})`, `Raised dispute · ${label}`, reason, 'lookup');
   toast(d, 'student', 'Dispute sent to Lab In-charge and student committee', 'success');
   toast(d, 'admin', `New dispute from ${STUDENT.id}: ${label}`, 'info');
+}
+
+// ---------- on-device AI ----------
+// A behaviour event from a real camera becomes a normal alert, with the
+// anonymised snapshot, the confidence and the plain-language reason attached.
+export function aiEvent(d, camId, ev, snap) {
+  const cam = camById(camId);
+  const type = RULES[ev.rule].alert;
+  d.ai.events += 1;
+  d.ai.byRule[ev.rule] = (d.ai.byRule[ev.rule] || 0) + 1;
+  d.camEvents += 1;
+  if (ev.rule === 'tamper' && d.cams[camId]) { d.cams[camId].status = 'tampered'; d.cams[camId].since = Date.now(); }
+  const a = createAlert(d, { type, cp: cam.cp, cam: camId, detail: `${cam.name}: ${ev.explain}.` });
+  a.ai = { rule: ev.rule, name: RULES[ev.rule].name, conf: +ev.conf.toFixed(2), explain: ev.explain, model: ev.rule === 'tamper' ? 'Image statistics (no ML)' : 'CenterNet + tracker, on device' };
+  a.snap = snap || null;
+  a.live = true;
+}
+
+// A pass shown to a live gate camera: verify the signed, rotating code, apply
+// anti-passback, then (if a face is enrolled on this device) the 1:1 face check.
+export function gateQr(d, camId, text, face) {
+  const cam = camById(camId);
+  const q = verifyQr(text);
+  const now = Date.now();
+  const rec = { id: 'GQ-' + ++d.seq, cam: camId, time: now, ok: false, reason: q.reason || '', face: face || null };
+  d.ai.used = d.ai.used || [];
+  if (q.ok && d.ai.used.includes(text)) { rec.reason = 'Code already used (one scan per code)'; }
+  else if (q.ok && q.id !== STUDENT.id) { rec.reason = 'Pass belongs to another student (demo knows only 21BRS045)'; }
+  else if (q.ok) {
+    const dir = d.gate.dir === 'IN' ? 'OUT' : 'IN';
+    if (face && !face.ok && face.decision !== 'NOT ENROLLED') rec.reason = 'Face check failed: ' + face.reasons[0];
+    else {
+      rec.ok = true; rec.dir = dir;
+      d.ai.used = [text, ...d.ai.used].slice(0, 50);
+      d.gate.dir = dir;
+      d.gate.log.unshift({ id: 'g' + ++d.seq, dir, place: `Main Gate (${camId}, live)`, time: now });
+      if (dir === 'IN') { d.inside += 1; d.entriesToday += 1; } else d.inside -= 1;
+    }
+  }
+  d.ai.gate.unshift(rec);
+  d.ai.gate = d.ai.gate.slice(0, 12);
+  const faceTxt = face ? (face.decision === 'MATCH' ? ` · face 1:1 ${(face.sim * 100).toFixed(0)}%, live ✓` : face.decision === 'NOT ENROLLED' ? ' · no face enrolled' : '') : '';
+  if (rec.ok) {
+    toast(d, 'guard', `${cam.name}: pass valid → ${rec.dir}${faceTxt}`, 'success');
+    toast(d, 'student', `Entry logged at the gate: ${rec.dir}, ${fmtTime(now)}${faceTxt}`, 'success');
+  } else {
+    toast(d, 'guard', `${cam.name}: rejected. ${rec.reason}`, 'alert');
+    if (q.id === STUDENT.id) toast(d, 'student', `Gate rejected your pass: ${rec.reason}`, 'alert');
+  }
+}
+
+export function gateFaceResult(d, result) {
+  const now = Date.now();
+  if (result.ok) {
+    const dir = d.gate.dir === 'IN' ? 'OUT' : 'IN';
+    d.gate.dir = dir;
+    d.gate.log.unshift({ id: 'g' + ++d.seq, dir, place: 'Main Gate (face 1:1, live)', time: now });
+    if (dir === 'IN') { d.inside += 1; d.entriesToday += 1; } else d.inside -= 1;
+    return dir;
+  }
+  return null;
 }

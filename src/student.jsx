@@ -5,6 +5,8 @@ import {
 } from './data.js';
 import CampusMap from './map.jsx';
 import { CameraFeed } from './cctv.jsx';
+import { FaceEnrolPage, GateCheckSheet } from './vision/ui.jsx';
+import { aiSupported } from './vision/engine.js';
 import {
   answerOk, cancelSos, follower, gateScan, goMissing, guardById, issueItems, lastPassed, nextStep,
   passNext, raiseDispute, reportDarkSpot, returnItem, sos, startWalk, toast, useApp,
@@ -33,8 +35,8 @@ export default function StudentApp() {
       </div>
 
       {showFollower && (
-        <div className="shake absolute inset-x-3 top-2 z-40 flex items-start gap-3 rounded-2xl bg-slate-900 p-3.5 text-white shadow-2xl ring-2 ring-accent">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent text-slate-900"><Icon name="vibrate" className="h-5 w-5" /></span>
+        <div className="shake absolute inset-x-3 top-2 z-40 flex items-start gap-3 rounded-2xl bg-ink p-3.5 text-white shadow-2xl ring-2 ring-accent">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent text-ink"><Icon name="vibrate" className="h-5 w-5" /></span>
           <div className="text-sm">
             <div className="font-semibold">Someone has been behind you for 3 checkpoints.</div>
             <div className="mt-0.5 text-slate-300">Guard {guardById(s, w.guard).name} notified. Keep walking to a lit area.</div>
@@ -74,11 +76,11 @@ function Home({ go }) {
   const mine = s.issued.filter((i) => i.status === 'issued');
   return (
     <div className="pb-28">
-      <div className="rounded-b-[32px] bg-gradient-to-br from-brand to-[#3D0D08] px-5 pb-20 pt-5 text-white">
+      <div className="rounded-b-[32px] bg-gradient-to-br from-[#0b2a35] to-[#060c11] ring-1 ring-brand/25 px-5 pb-20 pt-5 text-white">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm text-white/65">{greet},</div>
-            <div className="font-serif text-[26px] font-semibold">{STUDENT.first} 👋</div>
+            <div className="font-display text-[26px] font-semibold">{STUDENT.first} 👋</div>
           </div>
           <button type="button" onClick={() => go('profile')} aria-label="Profile"><Avatar size={46} /></button>
         </div>
@@ -102,7 +104,7 @@ function Home({ go }) {
         </Card>
 
         {w && w.phase === 'active' && (
-          <button type="button" onClick={() => go('walk')} className="fade-up flex w-full items-center gap-3 rounded-2xl bg-accent p-4 text-left text-slate-900 shadow-sm">
+          <button type="button" onClick={() => go('walk')} className="fade-up flex w-full items-center gap-3 rounded-2xl bg-accent p-4 text-left text-ink shadow-sm">
             <span className="grid h-11 w-11 place-items-center rounded-2xl bg-white/40"><Icon name="walk" /></span>
             <span className="flex-1">
               <span className="block font-bold">Saathi Walk in progress</span>
@@ -119,7 +121,7 @@ function Home({ go }) {
             { id: 'lab', icon: 'flask', t: 'LabLedger', d: `${mine.length} item${mine.length === 1 ? '' : 's'} with you`, c: 'bg-violet-100 text-violet-700' },
             { id: 'profile', icon: 'eye', t: 'My data', d: 'What we store', c: 'bg-emerald-100 text-emerald-700' },
           ].map((q) => (
-            <button key={q.id} type="button" onClick={() => go(q.id)} className="rounded-2xl bg-white p-4 text-left shadow-sm ring-1 ring-slate-200/70 transition hover:shadow-md active:scale-[.98]">
+            <button key={q.id} type="button" onClick={() => go(q.id)} className="rounded-2xl bg-card p-4 text-left shadow-sm ring-1 ring-slate-200/70 transition hover:shadow-md active:scale-[.98]">
               <span className={cls('grid h-10 w-10 place-items-center rounded-xl', q.c)}><Icon name={q.icon} /></span>
               <span className="mt-3 block font-bold text-slate-900">{q.t}</span>
               <span className="block text-xs text-slate-500">{q.d}</span>
@@ -127,10 +129,10 @@ function Home({ go }) {
           ))}
         </div>
 
-        <Card className="flex items-start gap-3 bg-gradient-to-br from-brand-50 to-white">
+        <Card className="flex items-start gap-3 bg-gradient-to-br from-brand-50 to-card">
           <Icon name="shield" className="mt-0.5 h-6 w-6 text-brand" />
           <div>
-            <div className="font-serif text-[17px] font-semibold text-slate-900">Identify at the doors, <i>anonymous in between.</i></div>
+            <div className="font-display text-[17px] font-semibold text-slate-900">Identify at the doors, <i>anonymous in between.</i></div>
             <p className="mt-0.5 text-sm text-slate-600">Cameras between checkpoints watch for danger, never for names.</p>
           </div>
         </Card>
@@ -168,6 +170,7 @@ function MyId() {
   const [lock, setLock] = useState('locked'); // locked | scanning | open
   const [scan, setScan] = useState(null); // { mode } while scanning
   const [result, setResult] = useState(null);
+  const [liveGate, setLiveGate] = useState(false);
   const fast = useFastNow(200);
   const slot = Math.floor(fast / (QR_PERIOD * 1000));
   const left = QR_PERIOD - ((fast / 1000) % QR_PERIOD);
@@ -199,10 +202,10 @@ function MyId() {
         <ScreenHeader title="My ID" sub="Your campus pass" />
         <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
           <div className="mb-2 grid h-14 w-14 place-items-center rounded-2xl bg-brand-100 text-brand"><Icon name="lock" className="h-7 w-7" /></div>
-          <h2 className="font-serif text-2xl font-semibold text-slate-900">Your ID is locked</h2>
+          <h2 className="font-display text-2xl font-semibold text-slate-900">Your ID is locked</h2>
           <p className="mt-1 text-sm text-slate-500">Only you can open your pass.</p>
           <button type="button" onClick={unlock} disabled={lock === 'scanning'}
-            className="relative mt-8 grid h-36 w-36 place-items-center rounded-full bg-white shadow-lg ring-1 ring-slate-200 transition active:scale-95">
+            className="relative mt-8 grid h-36 w-36 place-items-center rounded-full bg-card shadow-lg ring-1 ring-slate-200 transition active:scale-95">
             {lock === 'scanning' && <span className="pulse-ring-html absolute inset-0 rounded-full bg-brand-100" />}
             <span className="relative">
               <Icon name="fingerprint" className="h-20 w-20 text-slate-300" sw={1.5} />
@@ -221,14 +224,14 @@ function MyId() {
   return (
     <div className="pb-28">
       <ScreenHeader title="My ID" sub="Show this at any checkpoint" right={
-        <button type="button" onClick={() => setLock('locked')} className="flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200"><Icon name="lock" className="h-3.5 w-3.5" />Lock</button>
+        <button type="button" onClick={() => setLock('locked')} className="flex items-center gap-1 rounded-full bg-card px-3 py-1.5 text-xs font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200"><Icon name="lock" className="h-3.5 w-3.5" />Lock</button>
       } />
       <div className="space-y-4 px-4 pt-4">
-        <div className="fade-up overflow-hidden rounded-3xl bg-white shadow-md ring-1 ring-slate-200/70">
-          <div className="flex items-center gap-3 bg-gradient-to-r from-brand to-[#3D0D08] p-4 text-white">
+        <div className="fade-up overflow-hidden rounded-3xl bg-card shadow-md ring-1 ring-slate-200/70">
+          <div className="flex items-center gap-3 bg-gradient-to-r from-[#0b2a35] to-[#060c11] p-4 text-white border-b border-line">
             <Avatar size={56} />
             <div className="min-w-0">
-              <div className="font-serif text-xl font-semibold">{STUDENT.name}</div>
+              <div className="font-display text-xl font-semibold">{STUDENT.name}</div>
               <div className="text-sm text-white/80">{STUDENT.id}</div>
               <div className="truncate text-xs text-white/65">{STUDENT.dept} · {STUDENT.year}</div>
             </div>
@@ -254,6 +257,8 @@ function MyId() {
             <Btn v="outline" size="sm" onClick={() => setScan({ mode: 'expired' })}>Try screenshot QR</Btn>
             <Btn v="outline" size="sm" onClick={() => setScan({ mode: 'repeat' })}>Scan {s.gate.dir} again</Btn>
           </div>
+          {aiSupported() && <Btn v="soft" size="sm" className="mt-2 w-full" icon="camera" onClick={() => setLiveGate(true)}>Live gate check with this camera (AI)</Btn>}
+          <p className="mt-2 text-[11px] text-slate-500">Or hold this QR up to a webcam connected as CAM-G1 in the Guard app.</p>
         </DemoPanel>
 
         <div>
@@ -275,6 +280,7 @@ function MyId() {
         />
       )}
       {result && <ResultSheet {...result} onClose={() => setResult(null)} />}
+      {liveGate && <GateCheckSheet onClose={() => setLiveGate(false)} />}
     </div>
   );
 }
@@ -304,7 +310,7 @@ function RouteSteps({ steps, now, live }) {
           <li key={st.cp} className="relative flex gap-3 pb-5 last:pb-0">
             {!last && <span className={cls('absolute left-[17px] top-9 h-[calc(100%-28px)] w-0.5', passed ? 'bg-emerald-400' : 'bg-slate-200')} />}
             <span className={cls('relative z-[1] grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-extrabold',
-              passed ? 'bg-emerald-500 text-white' : missed ? 'bg-red-600 text-white' : isNext ? 'bg-accent text-slate-900' : 'bg-slate-100 text-slate-500')}>
+              passed ? 'bg-emerald-500 text-white' : missed ? 'bg-red-600 text-white' : isNext ? 'bg-accent text-ink' : 'bg-slate-100 text-slate-500')}>
               {isNext && !missed && <span className="pulse-soft absolute inset-0 rounded-full bg-accent" />}
               <span className="relative">{passed ? <Icon name="check" className="h-4 w-4" sw={3} /> : (cp.tag.length === 1 ? cp.tag : <Icon name="pin" className="h-4 w-4" />)}</span>
             </span>
@@ -348,12 +354,12 @@ function WalkIntro() {
     <div className="pb-28">
       <ScreenHeader title="Saathi Walk" sub="Night escort, checkpoint to checkpoint" />
       <div className="space-y-4 px-4 pt-4">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand to-[#3D0D08] p-6 text-white shadow-md">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0b2a35] to-[#060c11] ring-1 ring-brand/25 p-6 text-white shadow-md">
           {[[30, 20], [80, 40], [250, 26], [290, 60], [200, 14], [140, 50]].map(([x, y]) => (
-            <span key={x} className="blink absolute h-1 w-1 rounded-full bg-white" style={{ left: x, top: y, animationDelay: `${x * 7}ms` }} />
+            <span key={x} className="blink absolute h-1 w-1 rounded-full bg-card" style={{ left: x, top: y, animationDelay: `${x * 7}ms` }} />
           ))}
           <Icon name="moon" className="h-10 w-10 text-accent" />
-          <h2 className="mt-3 font-serif text-[26px] font-semibold leading-tight">Walking back late?<br />A Saathi walks with you.</h2>
+          <h2 className="mt-3 font-display text-[26px] font-semibold leading-tight">Walking back late?<br />A Saathi walks with you.</h2>
           <p className="mt-2 text-sm text-white/80">Guards see you only at checkpoints. Photos are deleted when you reach.</p>
           <Btn v="accent" size="lg" className="mt-5 w-full text-lg" icon="walk" onClick={() => setPick(true)}>Help me get home</Btn>
         </div>
@@ -380,7 +386,7 @@ function WalkIntro() {
             {Object.values(CP).map((c) => (
               <button key={c.id} type="button" onClick={() => { mutate((d) => reportDarkSpot(d, c.id)); setReport(false); }}
                 className="flex items-center gap-2 rounded-2xl bg-slate-50 p-3 text-left text-sm font-semibold text-slate-800 ring-1 ring-slate-200 hover:ring-brand">
-                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-white text-xs font-extrabold text-brand ring-1 ring-brand/30">{c.tag}</span>{c.name}
+                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-card text-xs font-extrabold text-brand ring-1 ring-brand/30">{c.tag}</span>{c.name}
               </button>
             ))}
           </div>
@@ -392,8 +398,8 @@ function WalkIntro() {
           <div className="space-y-2">
             {Object.entries(ROUTES).map(([k, rt]) => (
               <button key={k} type="button" onClick={() => setDest(k)}
-                className={cls('flex w-full items-center gap-3 rounded-2xl p-3 text-left ring-2 transition', dest === k ? 'bg-brand-50 ring-brand' : 'bg-white ring-slate-200')}>
-                <span className={cls('grid h-10 w-10 place-items-center rounded-xl', dest === k ? 'bg-brand text-white' : 'bg-slate-100 text-slate-500')}><Icon name={k === 'D' ? 'home' : 'logout'} /></span>
+                className={cls('flex w-full items-center gap-3 rounded-2xl p-3 text-left ring-2 transition', dest === k ? 'bg-brand-50 ring-brand' : 'bg-card ring-slate-200')}>
+                <span className={cls('grid h-10 w-10 place-items-center rounded-xl', dest === k ? 'bg-brand text-ink' : 'bg-slate-100 text-slate-500')}><Icon name={k === 'D' ? 'home' : 'logout'} /></span>
                 <span className="flex-1"><span className="block font-semibold text-slate-900">{rt.dest}</span><span className="block text-xs text-slate-500">{rt.sub}</span></span>
                 <span className="text-sm font-bold text-slate-700">{rt.steps.reduce((a, b) => a + b.mins, 0)} min</span>
               </button>
@@ -444,7 +450,7 @@ function WalkActive() {
     <div className="pb-32">
       <ScreenHeader title="Saathi Walk" sub={`To ${r.dest}`} right={<Badge className="bg-emerald-100 text-emerald-700"><LiveDot />LIVE</Badge>} />
       <div className="space-y-3 px-4 pt-4">
-        <div className="rounded-3xl bg-gradient-to-br from-brand to-[#3D0D08] p-4 text-white shadow-md">
+        <div className="rounded-3xl bg-gradient-to-br from-[#0b2a35] to-[#060c11] ring-1 ring-brand/25 p-4 text-white shadow-md">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-xs text-white/65">Walking to</div>
@@ -456,7 +462,7 @@ function WalkActive() {
             </div>
           </div>
           <div className="mt-3 flex items-center gap-2 rounded-2xl bg-white/10 p-2.5 text-sm">
-            <span className="grid h-8 w-8 place-items-center rounded-full bg-accent font-bold text-slate-900">{g.name[0]}</span>
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-accent font-bold text-ink">{g.name[0]}</span>
             <span className="flex-1">Guard on watch: <b>{g.name}</b></span>
             <Icon name="phone" className="h-4 w-4 text-white/65" />
           </div>
@@ -555,11 +561,11 @@ function AreYouOk() {
   const next = nextStep(w);
   const g = guardById(s, w.guard);
   return (
-    <div className="fade-in absolute inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-b from-[#3D0D08] to-slate-950 px-6 text-center text-white">
-      <Ring value={left} max={30} size={120} stroke={8} color="#BFA682" track="rgba(255,255,255,.15)">
+    <div className="fade-in absolute inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-b from-[#2a0711] to-ink px-6 text-center text-white">
+      <Ring value={left} max={30} size={120} stroke={8} color="#F43F5E" track="rgba(255,255,255,.12)">
         <div><div className="text-4xl font-black tabular-nums">{left}</div><div className="text-[10px] uppercase tracking-wider text-white/65">seconds</div></div>
       </Ring>
-      <h2 className="mt-6 font-serif text-[40px] font-semibold">Are you <i>OK?</i></h2>
+      <h2 className="mt-6 font-display text-[40px] font-semibold">Are you <i>OK?</i></h2>
       <p className="mt-2 text-white/80">You have not reached {CP[next.cp].name} ({cpShort(next.cp)}) on time.</p>
       <div className="mt-8 grid w-full max-w-[300px] gap-3">
         <Btn v="success" size="lg" className="h-16 text-lg" icon="check" onClick={() => mutate(answerOk)}>I'm OK</Btn>
@@ -582,7 +588,7 @@ function WalkArrived() {
         <div className="pop grid h-24 w-24 place-items-center rounded-full bg-emerald-100 text-emerald-600 ring-8 ring-emerald-50">
           <Icon name="home" className="h-11 w-11" />
         </div>
-        <h2 className="mt-5 font-serif text-[26px] font-semibold text-slate-900">You reached <i>safely.</i></h2>
+        <h2 className="mt-5 font-display text-[26px] font-semibold text-slate-900">You reached <i>safely.</i></h2>
         <p className="mt-1 flex items-center gap-1.5 font-semibold text-emerald-700"><Icon name="trash" className="h-4 w-4" />All walk photos deleted.</p>
         <p className="mt-1 text-sm text-slate-500">{ROUTES[w.dest].dest} · {fmtTime(w.arrivedAt)}</p>
       </div>
@@ -635,7 +641,7 @@ function Lab() {
       <ScreenHeader title="LabLedger" sub="Electronics Lab · borrow and return" />
       <div className="space-y-4 px-4 pt-4">
         <button type="button" onClick={() => setStage('scanShelf')}
-          className="flex w-full items-center gap-4 rounded-3xl bg-gradient-to-br from-brand to-[#3D0D08] p-5 text-left text-white shadow-md active:scale-[.99]">
+          className="flex w-full items-center gap-4 rounded-3xl bg-gradient-to-br from-[#0b2a35] to-[#060c11] ring-1 ring-brand/25 p-5 text-left text-white shadow-md active:scale-[.99]">
           <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/15"><Icon name="scan" className="h-7 w-7" /></span>
           <span className="flex-1">
             <span className="block text-lg font-bold">Scan QR at shelf</span>
@@ -712,7 +718,7 @@ function Lab() {
           <div className="space-y-2">
             {s.inventory.map((it) => (
               <div key={it.id} className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
-                <span className={cls('grid h-10 w-10 place-items-center rounded-xl', it.rfid ? 'bg-violet-100 text-violet-700' : 'bg-white text-brand ring-1 ring-slate-200')}><Icon name={it.rfid ? 'cpu' : 'box'} className="h-5 w-5" /></span>
+                <span className={cls('grid h-10 w-10 place-items-center rounded-xl', it.rfid ? 'bg-violet-100 text-violet-700' : 'bg-card text-brand ring-1 ring-slate-200')}><Icon name={it.rfid ? 'cpu' : 'box'} className="h-5 w-5" /></span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold text-slate-900">{it.name}</div>
                   <div className="text-xs text-slate-500">{it.rfid ? (it.holder ? `Issued to ${it.holder}` : `RFID ${it.rfid} · ${it.bench}`) : `${it.stock} in stock`}</div>
@@ -775,7 +781,7 @@ function DisputeSheet({ label, onClose }) {
       <div className="mt-3 flex flex-wrap gap-2">
         {DISPUTE_REASONS.map((r) => (
           <button key={r} type="button" onClick={() => setReason(r)}
-            className={cls('rounded-full px-3 py-2 text-sm font-medium ring-1 transition', reason === r ? 'bg-brand text-white ring-brand' : 'bg-white text-slate-700 ring-slate-300')}>{r}</button>
+            className={cls('rounded-full px-3 py-2 text-sm font-medium ring-1 transition', reason === r ? 'bg-brand text-ink ring-brand' : 'bg-card text-slate-700 ring-slate-300')}>{r}</button>
         ))}
       </div>
       <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="Add details (optional)"
@@ -791,6 +797,7 @@ function Profile() {
   const { s, reset } = useApp();
   const [page, setPage] = useState('main');
   if (page === 'data') return <MyData onBack={() => setPage('main')} />;
+  if (page === 'face') return <FaceEnrolPage onBack={() => setPage('main')} />;
   const rows = [
     ['idcard', 'Student ID', STUDENT.id],
     ['flask', 'Department', STUDENT.dept],
@@ -800,9 +807,9 @@ function Profile() {
   ];
   return (
     <div className="pb-28">
-      <div className="rounded-b-[32px] bg-gradient-to-br from-brand to-[#3D0D08] px-5 pb-6 pt-6 text-center text-white">
+      <div className="rounded-b-[32px] bg-gradient-to-br from-[#0b2a35] to-[#060c11] ring-1 ring-brand/25 px-5 pb-6 pt-6 text-center text-white">
         <Avatar size={84} className="mx-auto ring-4" />
-        <h2 className="mt-3 font-serif text-2xl font-semibold">{STUDENT.name}</h2>
+        <h2 className="mt-3 font-display text-2xl font-semibold">{STUDENT.name}</h2>
         <p className="text-sm text-white/80">{STUDENT.dept} · {STUDENT.year}</p>
         <Badge className="mt-2 bg-white/15 text-white"><Icon name="shieldCheck" className="h-3.5 w-3.5 text-accent" />Verified student</Badge>
       </div>
@@ -819,6 +826,7 @@ function Profile() {
         <Card className="divide-y divide-slate-100 p-0">
           {[
             { ic: 'eye', t: 'My data and privacy', d: 'What is stored and for how long', go: () => setPage('data') },
+            { ic: 'fingerprint', t: 'Face check at gates', d: 'Enrol on this phone for 1:1 checks', go: () => setPage('face') },
             { ic: 'flag', t: 'My disputes', d: s.disputes.length ? `${s.disputes.length} open` : 'None open', go: () => setPage('data') },
             { ic: 'refresh', t: 'Reset demo', d: 'Restore all mock data', go: reset },
           ].map((x) => (
@@ -859,7 +867,7 @@ function MyData({ onBack }) {
     <div className="pb-28">
       <ScreenHeader title="My data" sub="Exactly what Kavach keeps about you" onBack={onBack} />
       <div className="space-y-4 px-4 pt-4">
-        <div className="rounded-3xl bg-gradient-to-br from-brand to-[#3D0D08] p-5 text-white shadow-md">
+        <div className="rounded-3xl bg-gradient-to-br from-[#0b2a35] to-[#060c11] ring-1 ring-brand/25 p-5 text-white shadow-md">
           <div className="flex items-center gap-2 text-accent"><Icon name="shieldCheck" /><span className="text-sm font-bold uppercase tracking-wider">Our privacy promise</span></div>
           <ul className="mt-3 space-y-2.5">
             {promise.map(([b, t]) => (

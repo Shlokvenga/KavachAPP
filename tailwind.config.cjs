@@ -1,26 +1,53 @@
 /** @type {import('tailwindcss').Config} */
-// Colours follow the KLE Technological University brand guidebook:
-// Deep Red is the primary colour, Nutmeg highlights calls to action, KLE Red is a
-// sparing accent only, and the warm neutrals (Ivory, Sand, Quicksand, Slate) carry the UI.
+// Dark "tactical HUD" theme (from the CAMIQ design): obsidian background, telemetry
+// cyan for primary actions, coral for emergencies, emerald for safe, amber for warnings.
+// The neutral scale is inverted (slate-50 is darkest, slate-900 is lightest) and the
+// light status tints (red-50 … red-200) become translucent glows, so the same class
+// names read correctly on a dark UI.
+const colors = require('tailwindcss/colors');
+
+const rgba = (hex, a) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+};
+const onDark = (c) => ({
+  ...c,
+  50: rgba(c[500], 0.08),
+  100: rgba(c[500], 0.15),
+  200: rgba(c[500], 0.3),
+  700: c[300],
+  800: c[200],
+  900: c[100],
+});
+
 module.exports = {
   content: ['./src/**/*.{jsx,js,html}'],
   theme: {
     extend: {
       colors: {
-        brand: { DEFAULT: '#6B170D', light: '#8A2414', dark: '#4A0F08', 50: '#FBF3F1', 100: '#F5E1DC' },
-        accent: { DEFAULT: '#BFA682', light: '#E3D9C7', dark: '#8C7552' },
-        klered: '#BF383C',
-        ivory: '#F7F1EE',
-        sand: '#E3D9C7',
-        // Warm neutral scale built from Ivory → Quicksand → Slate, replacing Tailwind's cool slate.
+        ink: '#05090d',
+        card: '#0a1218',
+        raise: '#0e1a21',
+        line: 'rgba(112, 161, 177, 0.24)',
+        brand: { DEFAULT: '#00e5ff', light: '#67f0ff', dark: '#00b3c7', 50: 'rgba(0, 229, 255, 0.07)', 100: 'rgba(0, 229, 255, 0.14)' },
+        accent: { DEFAULT: '#00e5ff', light: 'rgba(0, 229, 255, 0.2)', dark: '#67f0ff' },
+        coral: '#F43F5E',
         slate: {
-          50: '#FAF7F5', 100: '#F3EEEA', 200: '#E6DED8', 300: '#D2C7BF', 400: '#A89A91', 500: '#7F716A',
-          600: '#6B5E58', 700: '#544943', 800: '#433B36', 900: '#2A231F', 950: '#1B1411',
+          50: '#070d12', 100: '#0e1920', 200: '#17262f', 300: '#22353f', 400: '#4b6370', 500: '#7b929c',
+          600: '#9db1b9', 700: '#bccbd1', 800: '#d6e2e6', 900: '#e8f2f4', 950: '#f4f9fa',
         },
+        red: onDark(colors.rose),
+        emerald: onDark(colors.emerald),
+        amber: onDark(colors.amber),
+        violet: onDark(colors.violet),
+        yellow: onDark(colors.yellow),
+        orange: onDark(colors.orange),
+        blue: onDark(colors.sky),
       },
       fontFamily: {
-        sans: ['Outfit Variable', 'Outfit', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        serif: ['Lora Variable', 'Lora', 'Georgia', 'serif'],
+        sans: ['Plus Jakarta Sans Variable', 'Plus Jakarta Sans', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        display: ['Space Grotesk Variable', 'Space Grotesk', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono Variable', 'JetBrains Mono', 'ui-monospace', 'monospace'],
       },
     },
   },

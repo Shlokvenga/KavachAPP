@@ -6,7 +6,7 @@ import { ALERT_TYPES, CP, camById, cls, fmtTime } from './data.js';
 import { useApp } from './store.js';
 import CampusMap from './map.jsx';
 import { CAM_STATUS, CamTile, CameraFeed, CameraViewer } from './cctv.jsx';
-import { Badge, Btn, Icon, KleLogo, LiveDot, Logo } from './ui.jsx';
+import { Badge, Btn, Icon, LiveDot, Logo } from './ui.jsx';
 
 let loading = null;
 function loadTwin() {
@@ -64,7 +64,7 @@ export function Twin({ data, onPick, apiRef, className }) {
   }, [apiRef]);
   useEffect(() => { if (inst.current) inst.current.update(data); });
   return (
-    <div className={cls(className || 'relative', 'overflow-hidden bg-[#1b1411]')}>
+    <div className={cls(className || 'relative', 'overflow-hidden bg-ink')}>
       <div ref={box} className={cls('absolute inset-0', state === 'error' && 'hidden')} />
       {state === 'loading' && (
         <div className="absolute inset-0 grid place-items-center text-sm text-white/70">
@@ -72,7 +72,7 @@ export function Twin({ data, onPick, apiRef, className }) {
         </div>
       )}
       {state === 'error' && (
-        <div className="absolute inset-0 overflow-auto bg-ivory p-2">
+        <div className="absolute inset-0 overflow-auto bg-raise p-2">
           <div className="mb-1 px-1 text-[11px] font-semibold text-slate-500">3D view needs WebGL. Showing the 2D map.</div>
           <CampusMap alerts={data.layers.alerts !== false ? s.alerts : []} guards={data.layers.guards !== false ? s.guards : []} walk={data.layers.walk !== false ? s.walk : null}
             heat={data.heat} showCams={data.layers.cams !== false} cams={s.cams} onCam={(id) => onPick && onPick('cam:' + id)} />
@@ -92,7 +92,7 @@ export function LayerChips({ layers, setLayers, dark }) {
         return (
           <button key={k} type="button" onClick={() => setLayers({ ...layers, [k]: !on })}
             className={cls('flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition',
-              on ? 'bg-accent text-slate-900' : dark ? 'bg-white/10 text-white/70' : 'bg-white text-slate-500 ring-1 ring-slate-200')}>
+              on ? 'bg-accent text-ink' : dark ? 'bg-white/10 text-white/70' : 'bg-card text-slate-500 ring-1 ring-slate-200')}>
             <Icon name={ic} className="h-3.5 w-3.5" />{l}
           </button>
         );
@@ -123,11 +123,11 @@ export function CommandCentre({ onClose }) {
   };
 
   return (
-    <div className="fade-in fixed inset-0 z-[200] flex flex-col bg-[#120d0b] text-white">
+    <div className="fade-in fixed inset-0 z-[200] flex flex-col bg-ink text-white">
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-white/10 px-4 py-2.5">
         <Logo className="h-8 w-8" />
         <div className="mr-2">
-          <div className="font-serif text-lg font-semibold leading-tight">Kavach command centre</div>
+          <div className="font-display text-lg font-semibold leading-tight">Kavach command centre</div>
           <div className="text-[11px] text-white/60">{CAMPUS_SHORT} · digital twin · {fmtTime(now, true)}</div>
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
@@ -137,7 +137,6 @@ export function CommandCentre({ onClose }) {
           <Badge className="bg-white/10 text-white">{counts.online}/{CAMERAS.length} cameras live</Badge>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <span className="hidden rounded-lg bg-white px-2 py-1 sm:block"><KleLogo className="h-6" /></span>
           <Btn v="dark" size="sm" icon="x" onClick={onClose}>Close</Btn>
         </div>
       </div>
@@ -160,7 +159,7 @@ export function CommandCentre({ onClose }) {
           {open.slice(0, 6).map((a) => (
             <button key={a.id} type="button" onClick={() => onPick('alert:' + a.id)}
               className={cls('flex items-center gap-3 rounded-xl p-2.5 text-left ring-1', sel === 'alert:' + a.id ? 'bg-white/15 ring-accent' : 'bg-white/5 ring-white/10')}>
-              <span className={cls('grid h-8 w-8 shrink-0 place-items-center rounded-lg', ALERT_TYPES[a.type].pri === 'medium' ? 'bg-amber-500 text-slate-900' : 'bg-red-600')}><Icon name={ALERT_TYPES[a.type].icon} className="h-4 w-4" /></span>
+              <span className={cls('grid h-8 w-8 shrink-0 place-items-center rounded-lg', ALERT_TYPES[a.type].pri === 'medium' ? 'bg-amber-500 text-ink' : 'bg-red-600')}><Icon name={ALERT_TYPES[a.type].icon} className="h-4 w-4" /></span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold">{ALERT_TYPES[a.type].label}</span>
                 <span className="block text-[11px] text-white/60">{CP[a.cp].name} · {fmtTime(a.time)}{a.escalated ? ' · escalated' : ''}</span>

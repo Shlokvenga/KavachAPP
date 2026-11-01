@@ -24,6 +24,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test behaviour rules and gate passes
+        run: npm test
+
       - name: Build web app into www/
         run: npm run build
 

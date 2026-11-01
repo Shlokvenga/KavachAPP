@@ -71,6 +71,11 @@ export const ALERT_TYPES = {
   camoffline: { label: 'Camera offline', icon: 'cameraOff', pri: 'medium' },
   flagged: { label: 'Guard-flagged incident', icon: 'flag', pri: 'high' },
   visitor: { label: 'Visitor in wrong zone', icon: 'badge', pri: 'medium' },
+  fall: { label: 'Person fallen', icon: 'alert', pri: 'high' },
+  running: { label: 'Running detected', icon: 'activity', pri: 'medium' },
+  loiter: { label: 'Loitering', icon: 'clock', pri: 'medium' },
+  crowd: { label: 'Crowding', icon: 'users', pri: 'medium' },
+  bag: { label: 'Unattended bag', icon: 'box', pri: 'medium' },
 };
 
 export const PRI = {
@@ -122,6 +127,20 @@ export const randInt = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 export const cls = (...a) => a.filter(Boolean).join(' ');
 export const distM = (a, b) => Math.round(Math.hypot(a.x - b.x, a.y - b.y)); // positions are in metres
 export const qrCode = (id, slot) => `KAVACH|${id}|${slot}|${hash(id + ':' + slot + ':k4v4ch').slice(0, 6)}`;
+// Checks a scanned pass: format, signature and age (a code is valid for its own
+// 10 s window plus one more, so a screenshot stops working within 20 s).
+// Prototype signature only; a real deployment would use an HMAC with a server key.
+export function verifyQr(text, now = Date.now()) {
+  const m = /^KAVACH\|([A-Z0-9]{6,12})\|(\d+)\|([A-Z0-9]{6})$/.exec(String(text).trim());
+  if (!m) return { ok: false, reason: 'Not a Kavach pass' };
+  const [, id, slotStr, sig] = m;
+  const slot = Number(slotStr);
+  if (qrCode(id, slot).split('|')[3] !== sig) return { ok: false, id, reason: 'Forged or altered code' };
+  const age = Math.floor(now / (QR_PERIOD * 1000)) - slot;
+  if (age < 0) return { ok: false, id, reason: 'Code from the future (check phone clock)' };
+  if (age > 1) return { ok: false, id, reason: `Expired code (${age * QR_PERIOD} s old)`, expired: true };
+  return { ok: true, id };
+}
 
 // ---------- initial state ----------
 export function makeInitial() {
@@ -190,6 +209,7 @@ export function makeInitial() {
     heatBase: { GATE: 14, WALL: 9, B: 7, D: 6, C: 4, LAB: 3, A: 2, ADMIN: 1 },
     cams: Object.fromEntries(CAMERAS.map((c) => [c.id, { status: 'online', zoom: 1, pan: 0, since: now - 6 * 24 * HOUR }])),
     camEvents: 1286, // analytics events today (behaviour only)
+    ai: { events: 0, byRule: {}, gate: [] },
     darkSpots: [],
     monthly: { walks: 214, followers: 3, faceSearches: 0, unblurs: 2 },
     toasts: [],

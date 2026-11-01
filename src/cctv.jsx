@@ -5,11 +5,13 @@ import { useEffect, useRef, useState } from 'react';
 import { ALERT_TYPES, CP, camById, cls, fmtTime, hash, pad } from './data.js';
 import { camPtz, flagIncident, guardById, requestUnblur, snapshot, talkDown, useApp, viewFeed } from './store.js';
 import { Badge, Btn, Icon } from './ui.jsx';
+import { isLive } from './vision/live.js';
+import { LiveView, useVision } from './vision/ui.jsx';
 
 export const CAM_STATUS = {
   online: { label: 'Live', badge: 'bg-emerald-500 text-white', dot: 'bg-emerald-500' },
   offline: { label: 'Offline', badge: 'bg-slate-500 text-white', dot: 'bg-slate-400' },
-  tampered: { label: 'Tampered', badge: 'bg-amber-500 text-slate-900', dot: 'bg-amber-500' },
+  tampered: { label: 'Tampered', badge: 'bg-amber-500 text-ink', dot: 'bg-amber-500' },
 };
 
 const isNight = (now) => { const h = new Date(now).getHours(); return h >= 18 || h < 6; };
@@ -32,9 +34,9 @@ function Backdrop({ scene, thermal }) {
       return (
         <g>
           <rect width="160" height="90" fill="#cfd8de" />{common}
-          <rect x="20" y="22" width="10" height="44" fill="#6B170D" /><rect x="130" y="22" width="10" height="44" fill="#6B170D" />
+          <rect x="20" y="22" width="10" height="44" fill="#334155" /><rect x="130" y="22" width="10" height="44" fill="#334155" />
           <rect x="30" y="26" width="100" height="6" fill="#F7F1EE" />
-          <text x="80" y="31" textAnchor="middle" fontSize="4.2" fontWeight="700" fill="#6B170D">KLE TECHNOLOGICAL UNIVERSITY</text>
+          <text x="80" y="31" textAnchor="middle" fontSize="4.2" fontWeight="700" fill="#334155">MAIN GATE · PB ROAD</text>
           <rect x="74" y="50" width="3" height="16" fill="#433B36" /><rect x="76" y="52" width="34" height="2" fill="#dc2626" />
         </g>
       );
@@ -52,7 +54,7 @@ function Backdrop({ scene, thermal }) {
       return (
         <g>
           <rect width="160" height="90" fill="#d9d2c4" />
-          <rect x="96" y="14" width="56" height="40" fill="#EADCC6" /><rect x="96" y="14" width="56" height="6" fill="#6B170D" />
+          <rect x="96" y="14" width="56" height="40" fill="#EADCC6" /><rect x="96" y="14" width="56" height="6" fill="#0e7490" />
           {common}
           {[22, 46].map((x) => <g key={x}><rect x={x} y="60" width="16" height="3" fill="#6B5E58" /><rect x={x + 7} y="63" width="2" height="7" fill="#6B5E58" /></g>)}
         </g>
@@ -98,8 +100,8 @@ function Walker({ i, seed, thermal, detections }) {
         <circle cx="0" cy="-11.5" r="3.4" fill={head} filter={thermal ? undefined : 'url(#faceblur)'} />
         {detections && (
           <>
-            <rect x="-7" y="-17" width="14" height="31" fill="none" stroke="#BFA682" strokeWidth=".8" strokeDasharray="2 1.2" />
-            <rect x="-7" y="-22" width="22" height="5" fill="#BFA682" />
+            <rect x="-7" y="-17" width="14" height="31" fill="none" stroke="#00e5ff" strokeWidth=".8" strokeDasharray="2 1.2" />
+            <rect x="-7" y="-22" width="22" height="5" fill="#00e5ff" />
             <text x="-6" y="-18.6" fontSize="3.4" fontWeight="700" fill="#1b1411">#{(seed % 90) + i * 7} {tag}</text>
           </>
         )}
@@ -110,6 +112,15 @@ function Walker({ i, seed, thermal, detections }) {
 
 export function CameraFeed({ camId, className, detections = true, showMeta = true }) {
   const { s, now } = useApp();
+  useVision();
+  if (isLive(camId)) {
+    return (
+      <div className={cls('relative w-full overflow-hidden rounded-xl bg-black', className)}>
+        <LiveView camId={camId} className="rounded-none" />
+        {showMeta && <div className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[9px] font-bold text-brand"><span className="h-1.5 w-1.5 rounded-full bg-red-500 blink" />{camId} · REAL · AI</div>}
+      </div>
+    );
+  }
   const cam = camById(camId);
   const st = s.cams[camId] || { status: 'online', zoom: 1, pan: 0 };
   const seed = parseInt(hash(camId).slice(0, 6), 36);
@@ -135,7 +146,7 @@ export function CameraFeed({ camId, className, detections = true, showMeta = tru
         </div>
       )}
       {st.status === 'tampered' && (
-        <div className="absolute inset-0 grid place-items-center bg-slate-900/80 backdrop-blur-md text-center">
+        <div className="absolute inset-0 grid place-items-center bg-black/80 backdrop-blur-md text-center">
           <div><Icon name="alert" className="mx-auto h-6 w-6 text-amber-400" /><div className="mt-1 text-[11px] font-bold tracking-widest text-amber-300">VIEW BLOCKED</div></div>
         </div>
       )}
@@ -159,11 +170,12 @@ export function CamTile({ camId, onOpen, highlight }) {
   const open = s.alerts.filter((a) => a.cam === camId && a.status !== 'resolved').length;
   return (
     <button type="button" onClick={() => onOpen(camId)}
-      className={cls('overflow-hidden rounded-2xl bg-white text-left shadow-sm ring-1 transition active:scale-[.98]', highlight || open ? 'ring-2 ring-red-400' : 'ring-slate-200/70')}>
+      className={cls('overflow-hidden rounded-2xl bg-card text-left shadow-sm ring-1 transition active:scale-[.98]', highlight || open ? 'ring-2 ring-red-400' : 'ring-slate-200/70')}>
       <CameraFeed camId={camId} detections={false} className="rounded-none" />
       <div className="flex items-center gap-1.5 px-2.5 py-2">
         <span className={cls('h-2 w-2 shrink-0 rounded-full', CAM_STATUS[st].dot)} />
         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-800">{cam.name}</span>
+        {isLive(camId) && <span className="rounded bg-brand px-1 font-mono text-[9px] font-bold text-ink">AI</span>}
         {open > 0 && <span className="grid h-4 min-w-4 place-items-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">{open}</span>}
       </div>
     </button>
@@ -188,7 +200,7 @@ export function CameraViewer({ camId, onClose, who, guardId }) {
   const g = guardId ? guardById(s, guardId) : null;
 
   return (
-    <div className="fade-in absolute inset-0 z-50 flex flex-col bg-slate-950 text-white">
+    <div className="fade-in absolute inset-0 z-50 flex flex-col bg-ink text-white">
       <div className="flex shrink-0 items-center gap-3 px-4 pb-3 pt-3">
         <button type="button" aria-label="Close camera" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-white/10"><Icon name="chevL" className="h-5 w-5" /></button>
         <div className="min-w-0 flex-1">

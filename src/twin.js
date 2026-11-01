@@ -15,9 +15,9 @@ import { BOUNDARY, BUILDINGS, CAMERAS, CHECKPOINTS, GROUND, LAWNS, ORIGIN, ROADS
 
 const C = (css, a = 1) => Color.fromCssColorString(css).withAlpha(a);
 const pos = (x, y, z = 0) => { const g = toGeo(x, y); return Cartesian3.fromDegrees(g.lon, g.lat, z); };
-const KIND_COLOR = { academic: '#EDE3D3', admin: '#FBF8F4', hostel: '#D8C1A2', amenity: '#E6D6BE', research: '#CFC4B6', lab: '#E9D9BF' };
-const CAM_COLOR = { online: '#22c55e', offline: '#94a3b8', tampered: '#f59e0b' };
-const ALERT_COLOR = { critical: '#ef4444', high: '#ef4444', medium: '#f59e0b' };
+const KIND_COLOR = { academic: '#1d3a46', admin: '#25495a', hostel: '#1f3b4d', amenity: '#1b333d', research: '#173f35', lab: '#1e4250' };
+const CAM_COLOR = { online: '#00e5ff', offline: '#64748b', tampered: '#f59e0b' };
+const ALERT_COLOR = { critical: '#F43F5E', high: '#F43F5E', medium: '#f59e0b' };
 const AREA = { w: 700, d: 560 }; // painted ground, a bit larger than the campus wall
 
 function paintGround() {
@@ -27,23 +27,23 @@ function paintGround() {
   const g = cv.getContext('2d');
   const X = (x) => (x + AREA.w / 2) * px;
   const Y = (y) => (AREA.d / 2 - y) * px;
-  g.fillStyle = '#8f8a78'; g.fillRect(0, 0, cv.width, cv.height); // city outside
-  g.fillStyle = '#3f3a36'; g.fillRect(0, Y(-222), cv.width, 18 * px); // PB Road
-  g.strokeStyle = '#d9cfb8'; g.setLineDash([12, 12]); g.lineWidth = 2;
+  g.fillStyle = '#071015'; g.fillRect(0, 0, cv.width, cv.height); // city outside
+  g.fillStyle = '#121f26'; g.fillRect(0, Y(-222), cv.width, 18 * px); // PB Road
+  g.strokeStyle = '#2c4450'; g.setLineDash([12, 12]); g.lineWidth = 2;
   g.beginPath(); g.moveTo(0, Y(-231)); g.lineTo(cv.width, Y(-231)); g.stroke(); g.setLineDash([]);
-  g.fillStyle = '#b7c49a'; g.fillRect(X(-BOUNDARY.w / 2), Y(BOUNDARY.d / 2), BOUNDARY.w * px, BOUNDARY.d * px); // campus
-  g.fillStyle = '#93b27a';
+  g.fillStyle = '#0b171d'; g.fillRect(X(-BOUNDARY.w / 2), Y(BOUNDARY.d / 2), BOUNDARY.w * px, BOUNDARY.d * px); // campus
+  g.fillStyle = '#0d2621';
   for (const l of LAWNS) g.fillRect(X(l.x - l.w / 2), Y(l.y + l.d / 2), l.w * px, l.d * px);
-  g.fillStyle = '#8fb873'; g.beginPath(); g.ellipse(X(GROUND.x), Y(GROUND.y), GROUND.rx * px, GROUND.ry * px, 0, 0, Math.PI * 2); g.fill();
-  g.strokeStyle = '#f4efe6'; g.lineWidth = 2; g.stroke();
+  g.fillStyle = '#0d2621'; g.beginPath(); g.ellipse(X(GROUND.x), Y(GROUND.y), GROUND.rx * px, GROUND.ry * px, 0, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = '#1f4a3e'; g.lineWidth = 2; g.stroke();
   g.lineCap = 'round'; g.lineJoin = 'round';
-  for (const [w, col] of [[11, '#cbbfa8'], [8, '#f2ece2']]) {
+  for (const [w, col] of [[11, '#132630'], [8, '#1d3540']]) {
     g.strokeStyle = col; g.lineWidth = w * px;
     for (const r of ROADS) { g.beginPath(); r.forEach(([x, y], i) => (i ? g.lineTo(X(x), Y(y)) : g.moveTo(X(x), Y(y)))); g.stroke(); }
   }
-  g.strokeStyle = '#6B5E58'; g.lineWidth = 3 * px;
+  g.strokeStyle = 'rgba(0,229,255,.55)'; g.lineWidth = 2 * px;
   g.strokeRect(X(-BOUNDARY.w / 2), Y(BOUNDARY.d / 2), BOUNDARY.w * px, BOUNDARY.d * px);
-  g.fillStyle = '#b7c49a'; g.fillRect(X(-12), Y(-206), 24 * px, 8 * px); // gate opening
+  g.fillStyle = '#0b171d'; g.fillRect(X(-12), Y(-206), 24 * px, 8 * px); // gate opening
   return cv.toDataURL('image/png');
 }
 
@@ -68,7 +68,7 @@ function staticScene(scene) {
     walls.push(new GeometryInstance({
       id: 'wall',
       geometry: new PolygonGeometry({ polygonHierarchy: new PolygonHierarchy(rectPositions({ x, y, w, d })), height: 0, extrudedHeight: 2.6, vertexFormat: PerInstanceColorAppearance.VERTEX_FORMAT }),
-      attributes: { color: ColorGeometryInstanceAttribute.fromColor(C('#6B5E58')) },
+      attributes: { color: ColorGeometryInstanceAttribute.fromColor(C('#2c4450')) },
     }));
   }
   const blds = [];
@@ -76,12 +76,12 @@ function staticScene(scene) {
     blds.push(new GeometryInstance({
       id: 'bld:' + b.id,
       geometry: new PolygonGeometry({ polygonHierarchy: new PolygonHierarchy(rectPositions(b)), height: 0, extrudedHeight: b.h, vertexFormat: PerInstanceColorAppearance.VERTEX_FORMAT }),
-      attributes: { color: ColorGeometryInstanceAttribute.fromColor(C(b.color || KIND_COLOR[b.kind])) },
+      attributes: { color: ColorGeometryInstanceAttribute.fromColor(C(KIND_COLOR[b.kind])) },
     }));
     blds.push(new GeometryInstance({
       id: 'bld:' + b.id,
       geometry: new PolygonGeometry({ polygonHierarchy: new PolygonHierarchy(rectPositions({ ...b, w: b.w - 3, d: b.d - 3 })), height: b.h, extrudedHeight: b.h + 0.8, vertexFormat: PerInstanceColorAppearance.VERTEX_FORMAT }),
-      attributes: { color: ColorGeometryInstanceAttribute.fromColor(C(b.roof || '#A89382')) },
+      attributes: { color: ColorGeometryInstanceAttribute.fromColor(C(b.kind === 'research' ? '#1f6b55' : '#0f2a33')) },
     }));
   }
   scene.primitives.add(new Primitive({ geometryInstances: [...walls, ...blds], appearance: new PerInstanceColorAppearance({ closed: true }), asynchronous: false }));
@@ -89,17 +89,17 @@ function staticScene(scene) {
   const labels = scene.primitives.add(new LabelCollection());
   for (const b of BUILDINGS) {
     labels.add({
-      position: pos(b.x, b.y, b.h + 6), text: b.short, font: '600 13px Outfit, system-ui, sans-serif',
-      fillColor: C('#2a221e'), outlineColor: C('#ffffff'), outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE,
+      position: pos(b.x, b.y, b.h + 6), text: b.short, font: '600 13px "Space Grotesk Variable", system-ui, sans-serif',
+      fillColor: C('#d6e2e6'), outlineColor: C('#05090d'), outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE,
       verticalOrigin: VerticalOrigin.BOTTOM, horizontalOrigin: HorizontalOrigin.CENTER,
       scaleByDistance: new NearFarScalar(150, 1.1, 1500, 0.55), disableDepthTestDistance: Number.POSITIVE_INFINITY, id: 'bld:' + b.id,
     });
   }
   const pts = scene.primitives.add(new PointPrimitiveCollection());
   for (const [id, cp] of Object.entries(CHECKPOINTS)) {
-    pts.add({ position: pos(cp.x, cp.y, 1.5), pixelSize: 15, color: C('#ffffff'), outlineColor: C('#6B170D'), outlineWidth: 3, id: 'cp:' + id, disableDepthTestDistance: Number.POSITIVE_INFINITY });
+    pts.add({ position: pos(cp.x, cp.y, 1.5), pixelSize: 15, color: C('#060c11'), outlineColor: C('#00e5ff'), outlineWidth: 3, id: 'cp:' + id, disableDepthTestDistance: Number.POSITIVE_INFINITY });
     labels.add({
-      position: pos(cp.x, cp.y, 1.5), text: cp.tag, font: '800 11px Outfit, system-ui, sans-serif', fillColor: C('#6B170D'),
+      position: pos(cp.x, cp.y, 1.5), text: cp.tag, font: '800 11px "Space Grotesk Variable", system-ui, sans-serif', fillColor: C('#00e5ff'),
       horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.CENTER, disableDepthTestDistance: Number.POSITIVE_INFINITY, id: 'cp:' + id,
     });
   }
@@ -131,7 +131,7 @@ function create(container, { onPick } = {}) {
   const scene = widget.scene;
   if (scene.sun) scene.sun.show = false;
   if (scene.moon) scene.moon.show = false;
-  scene.backgroundColor = C('#1b1411');
+  scene.backgroundColor = C('#05090d');
   const enu = Transforms.eastNorthUpToFixedFrame(pos(0, 0));
   scene.light = new DirectionalLight({ direction: Cartesian3.normalize(Matrix4.multiplyByPointAsVector(enu, new Cartesian3(0.45, 0.55, -0.7), new Cartesian3()), new Cartesian3()), intensity: 2.2 });
   const ctl = scene.screenSpaceCameraController;
@@ -166,12 +166,12 @@ function create(container, { onPick } = {}) {
         inst.push(new GeometryInstance({
           id: 'cam:' + cam.id,
           geometry: new PolygonGeometry({ polygonHierarchy: new PolygonHierarchy(wedge(cam)), height: 0.4, vertexFormat: PerInstanceColorAppearance.FLAT_VERTEX_FORMAT }),
-          attributes: { color: ColorGeometryInstanceAttribute.fromColor(C(st === 'online' ? '#BFA682' : CAM_COLOR[st], sel ? 0.55 : 0.28)) },
+          attributes: { color: ColorGeometryInstanceAttribute.fromColor(C(st === 'online' ? '#00e5ff' : CAM_COLOR[st], sel ? 0.4 : 0.16)) },
         }));
-        lines.add({ positions: [pos(cam.x, cam.y, 0), pos(cam.x, cam.y, 7)], width: 2, material: Material.fromType('Color', { color: C('#433B36') }) });
+        lines.add({ positions: [pos(cam.x, cam.y, 0), pos(cam.x, cam.y, 7)], width: 2, material: Material.fromType('Color', { color: C('#4b6370') }) });
         pts.add({ position: pos(cam.x, cam.y, 7), pixelSize: sel ? 14 : 10, color: C(CAM_COLOR[st]), outlineColor: C('#ffffff'), outlineWidth: 2, id: 'cam:' + cam.id, disableDepthTestDistance: Number.POSITIVE_INFINITY });
         if (L.labels !== false) {
-          labels.add({ position: pos(cam.x, cam.y, 7), text: cam.id, font: '600 10px Outfit, system-ui, sans-serif', fillColor: C('#ffffff'), outlineColor: C('#1b1411'), outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cartesian2(0, -14), horizontalOrigin: HorizontalOrigin.CENTER, scaleByDistance: new NearFarScalar(150, 1, 1200, 0.5), disableDepthTestDistance: Number.POSITIVE_INFINITY, id: 'cam:' + cam.id });
+          labels.add({ position: pos(cam.x, cam.y, 7), text: cam.id, font: '600 10px "Space Grotesk Variable", system-ui, sans-serif', fillColor: C('#ffffff'), outlineColor: C('#05090d'), outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cartesian2(0, -14), horizontalOrigin: HorizontalOrigin.CENTER, scaleByDistance: new NearFarScalar(150, 1, 1200, 0.5), disableDepthTestDistance: Number.POSITIVE_INFINITY, id: 'cam:' + cam.id });
         }
       }
       dyn.add(new Primitive({ geometryInstances: inst, appearance: new PerInstanceColorAppearance({ flat: true, translucent: true }), asynchronous: false }));
@@ -187,29 +187,29 @@ function create(container, { onPick } = {}) {
           id: 'heat:' + cp,
           geometry: new CylinderGeometry({ length: h, topRadius: 9 + (n / max) * 8, bottomRadius: 9 + (n / max) * 8, vertexFormat: PerInstanceColorAppearance.VERTEX_FORMAT }),
           modelMatrix: Transforms.eastNorthUpToFixedFrame(pos(p.x, p.y, h / 2)),
-          attributes: { color: ColorGeometryInstanceAttribute.fromColor(Color.lerp(C('#BFA682'), C('#BF383C'), n / max, new Color()).withAlpha(0.8)) },
+          attributes: { color: ColorGeometryInstanceAttribute.fromColor(Color.lerp(C('#f59e0b'), C('#F43F5E'), n / max, new Color()).withAlpha(0.8)) },
         }));
-        labels.add({ position: pos(p.x, p.y, h + 4), text: String(n), font: '800 14px Outfit, system-ui, sans-serif', fillColor: C('#ffffff'), outlineColor: C('#6B170D'), outlineWidth: 4, style: LabelStyle.FILL_AND_OUTLINE, horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.BOTTOM, disableDepthTestDistance: Number.POSITIVE_INFINITY });
+        labels.add({ position: pos(p.x, p.y, h + 4), text: String(n), font: '800 14px "Space Grotesk Variable", system-ui, sans-serif', fillColor: C('#ffffff'), outlineColor: C('#4c0519'), outlineWidth: 4, style: LabelStyle.FILL_AND_OUTLINE, horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.BOTTOM, disableDepthTestDistance: Number.POSITIVE_INFINITY });
       }
       if (inst.length) dyn.add(new Primitive({ geometryInstances: inst, appearance: new PerInstanceColorAppearance({ closed: true, translucent: true }), asynchronous: false }));
     }
 
     if (L.walk !== false && d.walk && d.walk.route.length) {
       const route = d.walk.route.map((id) => CHECKPOINTS[id]);
-      lines.add({ positions: route.map((p) => pos(p.x, p.y, 2)), width: 5, material: Material.fromType('PolylineDash', { color: C('#F2C14E'), dashLength: 18 }) });
+      lines.add({ positions: route.map((p) => pos(p.x, p.y, 2)), width: 5, material: Material.fromType('PolylineDash', { color: C('#10B981'), dashLength: 18 }) });
       const at = CHECKPOINTS[d.walk.at];
       if (at) {
-        const p = pts.add({ position: pos(at.x, at.y, 3), pixelSize: 18, color: C('#F2C14E', 0.6), disableDepthTestDistance: Number.POSITIVE_INFINITY });
+        const p = pts.add({ position: pos(at.x, at.y, 3), pixelSize: 18, color: C('#10B981', 0.6), disableDepthTestDistance: Number.POSITIVE_INFINITY });
         pulses.push(p);
-        pts.add({ position: pos(at.x, at.y, 3), pixelSize: 12, color: C('#F2C14E'), outlineColor: C('#ffffff'), outlineWidth: 2, id: 'walk', disableDepthTestDistance: Number.POSITIVE_INFINITY });
-        labels.add({ position: pos(at.x, at.y, 3), text: 'Saathi Walk', font: '700 11px Outfit, system-ui, sans-serif', fillColor: C('#F2C14E'), outlineColor: C('#1b1411'), outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cartesian2(0, -16), horizontalOrigin: HorizontalOrigin.CENTER, disableDepthTestDistance: Number.POSITIVE_INFINITY });
+        pts.add({ position: pos(at.x, at.y, 3), pixelSize: 12, color: C('#10B981'), outlineColor: C('#ffffff'), outlineWidth: 2, id: 'walk', disableDepthTestDistance: Number.POSITIVE_INFINITY });
+        labels.add({ position: pos(at.x, at.y, 3), text: 'Saathi Walk', font: '700 11px "Space Grotesk Variable", system-ui, sans-serif', fillColor: C('#10B981'), outlineColor: C('#05090d'), outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cartesian2(0, -16), horizontalOrigin: HorizontalOrigin.CENTER, disableDepthTestDistance: Number.POSITIVE_INFINITY });
       }
     }
 
     if (L.guards !== false) {
       for (const g of d.guards || []) {
-        pts.add({ position: pos(g.x, g.y, 2), pixelSize: 13, color: C('#2563eb'), outlineColor: C('#ffffff'), outlineWidth: 2, id: 'guard:' + g.id, disableDepthTestDistance: Number.POSITIVE_INFINITY });
-        labels.add({ position: pos(g.x, g.y, 2), text: g.name, font: '700 11px Outfit, system-ui, sans-serif', fillColor: C('#dbeafe'), outlineColor: C('#1b1411'), outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cartesian2(0, 16), horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.TOP, disableDepthTestDistance: Number.POSITIVE_INFINITY });
+        pts.add({ position: pos(g.x, g.y, 2), pixelSize: 13, color: C('#38bdf8'), outlineColor: C('#ffffff'), outlineWidth: 2, id: 'guard:' + g.id, disableDepthTestDistance: Number.POSITIVE_INFINITY });
+        labels.add({ position: pos(g.x, g.y, 2), text: g.name, font: '700 11px "Space Grotesk Variable", system-ui, sans-serif', fillColor: C('#dbeafe'), outlineColor: C('#05090d'), outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cartesian2(0, 16), horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.TOP, disableDepthTestDistance: Number.POSITIVE_INFINITY });
       }
     }
 
@@ -223,7 +223,7 @@ function create(container, { onPick } = {}) {
         lines.add({ positions: [pos(x, y, 0), pos(x, y, 90)], width: 10, material: Material.fromType('PolylineGlow', { color: C(col, 0.9), glowPower: 0.25 }) });
         pulses.push(pts.add({ position: pos(x, y, 3), pixelSize: 20, color: C(col, 0.6), disableDepthTestDistance: Number.POSITIVE_INFINITY }));
         pts.add({ position: pos(x, y, 3), pixelSize: d.selected === 'alert:' + a.id ? 16 : 12, color: C(col), outlineColor: C('#ffffff'), outlineWidth: 2, id: 'alert:' + a.id, disableDepthTestDistance: Number.POSITIVE_INFINITY });
-        if (L.labels !== false) labels.add({ position: pos(x, y, 92), text: a.label, font: '700 12px Outfit, system-ui, sans-serif', fillColor: C('#ffffff'), outlineColor: C('#7f1d1d'), outlineWidth: 4, style: LabelStyle.FILL_AND_OUTLINE, horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.BOTTOM, scaleByDistance: new NearFarScalar(200, 1, 1500, 0.6), disableDepthTestDistance: Number.POSITIVE_INFINITY, id: 'alert:' + a.id });
+        if (L.labels !== false) labels.add({ position: pos(x, y, 92), text: a.label, font: '700 12px "Space Grotesk Variable", system-ui, sans-serif', fillColor: C('#ffffff'), outlineColor: C('#7f1d1d'), outlineWidth: 4, style: LabelStyle.FILL_AND_OUTLINE, horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.BOTTOM, scaleByDistance: new NearFarScalar(200, 1, 1500, 0.6), disableDepthTestDistance: Number.POSITIVE_INFINITY, id: 'alert:' + a.id });
       }
     }
     dyn.add(lines); dyn.add(pts); dyn.add(labels);
