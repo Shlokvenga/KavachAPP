@@ -411,7 +411,7 @@ function TwinTab({ openCam, openCc }) {
             <Btn size="sm" icon="video" onClick={() => openCam(selCam)}>Open</Btn>
           </div>
         ) : (
-          <div className="px-3 py-2.5 text-xs text-slate-500">Drag to rotate, pinch to zoom. Tap a camera to see its feed. Campus layout is approximate.</div>
+          <div className="px-3 py-2.5 text-xs text-slate-500">Drag to rotate, pinch to zoom. Tap a camera to see its feed. Buildings and boundary from OpenStreetMap.</div>
         )}
       </Card>
       <div>

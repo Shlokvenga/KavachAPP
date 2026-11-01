@@ -297,8 +297,8 @@ export const TRIGGERS = {
   wall: (d) => createAlert(d, { type: 'wall', cp: 'WALL', cam: 'CAM-W1', detail: 'Person climbing over the east boundary wall. Thermal camera CAM-W1.' }),
   tailgate: (d) => createAlert(d, { type: 'tailgate', cp: 'GATE', cam: 'CAM-G2', detail: 'Two people passed on one scan at Lane 2. Second person not verified.' }),
   tamper: (d) => {
-    setCam(d, 'CAM-C2', 'tampered');
-    createAlert(d, { type: 'tamper', cp: 'C', cam: 'CAM-C2', detail: 'CAM-C2 covered or moved. View blocked for 20 s.' });
+    setCam(d, 'CAM-K2', 'tampered');
+    createAlert(d, { type: 'tamper', cp: 'K', cam: 'CAM-K2', detail: 'CAM-K2 covered or moved. View blocked for 20 s.' });
   },
   camoffline: (d) => {
     setCam(d, 'CAM-W2', 'offline');
@@ -357,7 +357,7 @@ export function equipmentLeaving(d, itemId = 'osc4') {
     return false;
   }
   createAlert(d, { type: 'lab', cp: 'LAB', cam: 'CAM-L1', detail: `${it.name} (RFID ${it.rfid}) passed the lab door without being issued.` });
-  createAlert(d, { type: 'lab', cp: 'GATE', cam: 'CAM-G1', detail: `Hold at gate: ${it.name} (RFID ${it.rfid}) left the ECE lab without issue. Check bags at exit.` });
+  createAlert(d, { type: 'lab', cp: 'GATE', cam: 'CAM-G1', detail: `Hold at gate: ${it.name} (RFID ${it.rfid}) left the EC & EE lab without issue. Check bags at exit.` });
   toast(d, 'admin', 'Cross-module rule fired: lab door + Main Gate alerted', 'warn');
   return true;
 }
@@ -368,7 +368,7 @@ export function visitorWrongZone(d) {
     type: 'visitor',
     cp: 'D',
     cam: 'CAM-D2',
-    detail: v ? `${v.name} (pass ${v.id}) seen near the Girls Hostel. Allowed zone: ${v.dest}, ${v.from}–${v.to}.` : 'Someone without a visitor pass seen near the Girls Hostel.',
+    detail: v ? `${v.name} (pass ${v.id}) seen near the Girls Hostel by CAM-D2. Allowed zone: ${v.dest}, ${v.from}–${v.to}.` : 'Someone without a visitor pass seen near the Girls Hostel.',
   });
   toast(d, 'admin', 'Visitor outside allowed zone. Guard alerted.', 'warn');
 }

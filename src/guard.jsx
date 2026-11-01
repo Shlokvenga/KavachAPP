@@ -254,8 +254,9 @@ function CamerasTab({ openCam }) {
   const counts = { online: 0, none: 0, offline: 0, tampered: 0 };
   for (const c of CAMERAS) counts[camStatus(s, c.id)] += 1;
   const alertCams = new Set(s.alerts.filter((a) => a.status !== 'resolved' && a.cam).map((a) => a.cam));
-  const zones = [['all', 'All'], ['live', 'Live'], ['alert', 'With alerts'], ['GATE', 'Gate'], ['B', 'Paths'], ['D', 'Hostels'], ['WALL', 'Wall']];
-  const list = CAMERAS.filter((c) => zone === 'all' || (zone === 'live' ? isLive(c.id) : zone === 'alert' ? alertCams.has(c.id) : zone === 'D' ? ['D', 'E'].includes(c.cp) : c.cp === zone))
+  const zones = [['all', 'All'], ['live', 'Live'], ['alert', 'With alerts'], ['GATE', 'Gate'], ['paths', 'Paths'], ['hostels', 'Hostels'], ['WALL', 'Wall']];
+  const ZONE = { paths: ['A', 'B', 'C', 'F', 'K'], hostels: ['D', 'E'] };
+  const list = CAMERAS.filter((c) => zone === 'all' || (zone === 'live' ? isLive(c.id) : zone === 'alert' ? alertCams.has(c.id) : ZONE[zone] ? ZONE[zone].includes(c.cp) : c.cp === zone))
     .sort((a, b) => Number(isLive(b.id)) - Number(isLive(a.id)) || Number(alertCams.has(b.id)) - Number(alertCams.has(a.id)));
   return (
     <div className="space-y-3 p-4 pb-8">
@@ -343,7 +344,7 @@ function DemoTab() {
   const triggers = [
     { k: 'wall', icon: 'fence', t: 'Wall crossing', d: 'Boundary Wall East', run: TRIGGERS.wall },
     { k: 'tailgate', icon: 'tailgate', t: 'Tailgating at gate', d: 'Main Gate, Lane 2', run: TRIGGERS.tailgate },
-    { k: 'tamper', icon: 'cameraOff', t: 'Camera tampered', d: 'CAM-C2, Canteen', run: TRIGGERS.tamper },
+    { k: 'tamper', icon: 'cameraOff', t: 'Camera tampered', d: 'CAM-K2, Canteen', run: TRIGGERS.tamper },
     { k: 'lab', icon: 'cpu', t: 'Oscilloscope leaving lab', d: osc.holder ? `Issued to ${osc.holder}` : 'Not issued: lab + gate', run: (d) => equipmentLeaving(d, 'osc4') },
     { k: 'visitor', icon: 'badge', t: 'Visitor in wrong zone', d: 'Seen near Girls Hostel', run: visitorWrongZone },
     { k: 'camoffline', icon: 'video', t: 'Camera goes offline', d: 'CAM-W2, east wall', run: TRIGGERS.camoffline },

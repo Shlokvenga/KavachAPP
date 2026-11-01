@@ -32,7 +32,7 @@ export const COLLEGE_SHORT = 'KLE Tech, Hubballi';
 // Checkpoints come from the campus model (src/campus.js).
 export const CP = Object.fromEntries(Object.entries(CHECKPOINTS).map(([id, c]) => [id, { id, ...c }]));
 
-export const cpShort = (id) => (['A', 'B', 'C', 'D', 'E'].includes(id) ? CP[id].tag : CP[id].name);
+export const cpShort = (id) => (['A', 'B', 'C', 'D', 'E', 'F', 'K'].includes(id) ? CP[id].tag : CP[id].name);
 
 export const GUARDS = [
   { id: 'ramesh', name: 'Ramesh', post: 'Main Gate', ...GUARD_POSTS.ramesh },
@@ -40,17 +40,19 @@ export const GUARDS = [
   { id: 'imran', name: 'Imran', post: 'Boys Hostel', ...GUARD_POSTS.imran },
 ];
 
+// Saathi Walk routes on the real campus (see src/campus.js). mins = walking time
+// for that stretch.
 export const ROUTES = {
   D: {
     dest: 'Girls Hostel',
-    sub: 'Via Workshop Path and Canteen',
+    sub: 'Via Sports Arena path and Hostel Lane',
     guard: 'sunita',
     finalScan: 'hostel QR',
     steps: [
       { cp: 'A', mins: 0 },
-      { cp: 'B', mins: 3 },
-      { cp: 'C', mins: 4 },
-      { cp: 'D', mins: 3 },
+      { cp: 'B', mins: 2 },
+      { cp: 'C', mins: 2 },
+      { cp: 'D', mins: 2 },
     ],
   },
   E: {
@@ -60,7 +62,7 @@ export const ROUTES = {
     finalScan: 'hostel QR',
     steps: [
       { cp: 'A', mins: 0 },
-      { cp: 'B', mins: 3 },
+      { cp: 'F', mins: 3 },
       { cp: 'E', mins: 4 },
     ],
   },
@@ -71,8 +73,8 @@ export const ROUTES = {
     finalScan: 'gate QR',
     steps: [
       { cp: 'A', mins: 0 },
-      { cp: 'ADMIN', mins: 3 },
-      { cp: 'GATE', mins: 3 },
+      { cp: 'ADMIN', mins: 2 },
+      { cp: 'GATE', mins: 1 },
     ],
   },
 };
@@ -105,7 +107,7 @@ export const PRI = {
 };
 
 export const VISITOR_PURPOSES = ['Meeting', 'Parent visit', 'Delivery', 'Interview', 'Event', 'Maintenance'];
-export const VISITOR_ZONES = ['Main Building', 'Central Library', 'ECE Electronics Lab', 'Canteen Junction', 'Auditorium'];
+export const VISITOR_ZONES = ['Main Building', 'LHC', 'C-LITE', 'EC & EE Lab', 'Canteen', 'BT Auditorium'];
 
 export const DISPUTE_REASONS = ["I didn't take this", 'Quantity is wrong', 'It was already damaged', 'Wrong time or bench', 'Something else'];
 

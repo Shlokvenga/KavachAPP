@@ -11,49 +11,49 @@ import {
   PointPrimitiveCollection, PolylineCollection, Primitive, PrimitiveCollection, ScreenSpaceEventHandler, ScreenSpaceEventType, Transforms, VerticalOrigin,
   ApproximateTerrainHeights,
 } from '@cesium/engine';
-import { BOUNDARY, BUILDINGS, CAMERAS, CHECKPOINTS, GROUND, LAWNS, ORIGIN, ROADS, toGeo } from './campus.js';
+import { BOUNDARY, BOUNDS, BUILDINGS, CAMERAS, CHECKPOINTS, ORIGIN, ROADS, toGeo } from './campus.js';
 
 const C = (css, a = 1) => Color.fromCssColorString(css).withAlpha(a);
 const pos = (x, y, z = 0) => { const g = toGeo(x, y); return Cartesian3.fromDegrees(g.lon, g.lat, z); };
 const KIND_COLOR = { academic: '#1d3a46', admin: '#25495a', hostel: '#1f3b4d', amenity: '#1b333d', research: '#173f35', lab: '#1e4250' };
 const CAM_COLOR = { online: '#00e5ff', none: '#4b6370', offline: '#64748b', tampered: '#f59e0b' };
 const ALERT_COLOR = { critical: '#F43F5E', high: '#F43F5E', medium: '#f59e0b' };
-const AREA = { w: 700, d: 560 }; // painted ground, a bit larger than the campus wall
+// painted ground: the campus bounding box plus a margin of surrounding city
+const AREA = { x0: BOUNDS.minX - 80, x1: BOUNDS.maxX + 80, y0: BOUNDS.minY - 80, y1: BOUNDS.maxY + 80 };
 
 function paintGround() {
-  const px = 2; // pixels per metre
+  const px = 1.5; // pixels per metre
   const cv = document.createElement('canvas');
-  cv.width = AREA.w * px; cv.height = AREA.d * px;
+  cv.width = Math.round((AREA.x1 - AREA.x0) * px); cv.height = Math.round((AREA.y1 - AREA.y0) * px);
   const g = cv.getContext('2d');
-  const X = (x) => (x + AREA.w / 2) * px;
-  const Y = (y) => (AREA.d / 2 - y) * px;
+  const X = (x) => (x - AREA.x0) * px;
+  const Y = (y) => (AREA.y1 - y) * px;
+  const path = (line, close) => { g.beginPath(); line.forEach(([x, y], i) => (i ? g.lineTo(X(x), Y(y)) : g.moveTo(X(x), Y(y)))); if (close) g.closePath(); };
   g.fillStyle = '#071015'; g.fillRect(0, 0, cv.width, cv.height); // city outside
-  g.fillStyle = '#121f26'; g.fillRect(0, Y(-222), cv.width, 18 * px); // PB Road
-  g.strokeStyle = '#2c4450'; g.setLineDash([12, 12]); g.lineWidth = 2;
-  g.beginPath(); g.moveTo(0, Y(-231)); g.lineTo(cv.width, Y(-231)); g.stroke(); g.setLineDash([]);
-  g.fillStyle = '#0b171d'; g.fillRect(X(-BOUNDARY.w / 2), Y(BOUNDARY.d / 2), BOUNDARY.w * px, BOUNDARY.d * px); // campus
-  g.fillStyle = '#0d2621';
-  for (const l of LAWNS) g.fillRect(X(l.x - l.w / 2), Y(l.y + l.d / 2), l.w * px, l.d * px);
-  g.fillStyle = '#0d2621'; g.beginPath(); g.ellipse(X(GROUND.x), Y(GROUND.y), GROUND.rx * px, GROUND.ry * px, 0, 0, Math.PI * 2); g.fill();
-  g.strokeStyle = '#1f4a3e'; g.lineWidth = 2; g.stroke();
+  // PB Road runs along the south-west edge of the campus
+  g.strokeStyle = '#121f26'; g.lineWidth = 16 * px; g.lineCap = 'round';
+  path([[-470, 215], [-180, -145], [-60, -175], [90, -260]]); g.stroke();
+  g.fillStyle = '#0b171d'; path(BOUNDARY, true); g.fill();
   g.lineCap = 'round'; g.lineJoin = 'round';
-  for (const [w, col] of [[11, '#132630'], [8, '#1d3540']]) {
+  for (const [w, col] of [[9, '#132630'], [6, '#1d3540']]) {
     g.strokeStyle = col; g.lineWidth = w * px;
-    for (const r of ROADS) { g.beginPath(); r.forEach(([x, y], i) => (i ? g.lineTo(X(x), Y(y)) : g.moveTo(X(x), Y(y)))); g.stroke(); }
+    for (const r of ROADS) { path(r); g.stroke(); }
   }
-  g.strokeStyle = 'rgba(0,229,255,.55)'; g.lineWidth = 2 * px;
-  g.strokeRect(X(-BOUNDARY.w / 2), Y(BOUNDARY.d / 2), BOUNDARY.w * px, BOUNDARY.d * px);
-  g.fillStyle = '#0b171d'; g.fillRect(X(-12), Y(-206), 24 * px, 8 * px); // gate opening
+  g.strokeStyle = 'rgba(0,229,255,.55)'; g.lineWidth = 1.6 * px; path(BOUNDARY, true); g.stroke();
   return cv.toDataURL('image/png');
 }
 
-function rectPositions(b) {
-  const hw = b.w / 2; const hd = b.d / 2;
-  return [pos(b.x - hw, b.y - hd), pos(b.x + hw, b.y - hd), pos(b.x + hw, b.y + hd), pos(b.x - hw, b.y + hd)];
+const ring = (poly, z = 0) => poly.map(([x, y]) => pos(x, y, z));
+
+// thin wall segment along one boundary edge
+function wallSegment([x1, y1], [x2, y2]) {
+  const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+  const nx = (-(y2 - y1) / len) * 0.6; const ny = ((x2 - x1) / len) * 0.6;
+  return [pos(x1 + nx, y1 + ny), pos(x2 + nx, y2 + ny), pos(x2 - nx, y2 - ny), pos(x1 - nx, y1 - ny)];
 }
 
 function staticScene(scene) {
-  const sw = toGeo(-AREA.w / 2, -AREA.d / 2); const ne = toGeo(AREA.w / 2, AREA.d / 2);
+  const sw = toGeo(AREA.x0, AREA.y0); const ne = toGeo(AREA.x1, AREA.y1);
   scene.primitives.add(new Primitive({
     geometryInstances: new GeometryInstance({
       geometry: new RectangleGeometry({ rectangle: Rectangle.fromDegrees(sw.lon, sw.lat, ne.lon, ne.lat), vertexFormat: EllipsoidSurfaceAppearance.VERTEX_FORMAT }),
@@ -62,25 +62,21 @@ function staticScene(scene) {
     asynchronous: false,
   }));
 
-  const walls = [];
-  const bw = BOUNDARY.w / 2; const bd = BOUNDARY.d / 2;
-  for (const [x, y, w, d] of [[0, bd, BOUNDARY.w, 1.2], [0, -bd, BOUNDARY.w, 1.2], [-bw, 0, 1.2, BOUNDARY.d], [bw, 0, 1.2, BOUNDARY.d]]) {
-    walls.push(new GeometryInstance({
-      id: 'wall',
-      geometry: new PolygonGeometry({ polygonHierarchy: new PolygonHierarchy(rectPositions({ x, y, w, d })), height: 0, extrudedHeight: 2.6, vertexFormat: PerInstanceColorAppearance.VERTEX_FORMAT }),
-      attributes: { color: ColorGeometryInstanceAttribute.fromColor(C('#2c4450')) },
-    }));
-  }
+  const walls = BOUNDARY.map((p, i) => new GeometryInstance({
+    id: 'wall',
+    geometry: new PolygonGeometry({ polygonHierarchy: new PolygonHierarchy(wallSegment(p, BOUNDARY[(i + 1) % BOUNDARY.length])), height: 0, extrudedHeight: 2.6, vertexFormat: PerInstanceColorAppearance.VERTEX_FORMAT }),
+    attributes: { color: ColorGeometryInstanceAttribute.fromColor(C('#2c4450')) },
+  }));
   const blds = [];
   for (const b of BUILDINGS) {
     blds.push(new GeometryInstance({
       id: 'bld:' + b.id,
-      geometry: new PolygonGeometry({ polygonHierarchy: new PolygonHierarchy(rectPositions(b)), height: 0, extrudedHeight: b.h, vertexFormat: PerInstanceColorAppearance.VERTEX_FORMAT }),
+      geometry: new PolygonGeometry({ polygonHierarchy: new PolygonHierarchy(ring(b.poly)), height: 0, extrudedHeight: b.h, vertexFormat: PerInstanceColorAppearance.VERTEX_FORMAT }),
       attributes: { color: ColorGeometryInstanceAttribute.fromColor(C(KIND_COLOR[b.kind])) },
     }));
     blds.push(new GeometryInstance({
       id: 'bld:' + b.id,
-      geometry: new PolygonGeometry({ polygonHierarchy: new PolygonHierarchy(rectPositions({ ...b, w: b.w - 3, d: b.d - 3 })), height: b.h, extrudedHeight: b.h + 0.8, vertexFormat: PerInstanceColorAppearance.VERTEX_FORMAT }),
+      geometry: new PolygonGeometry({ polygonHierarchy: new PolygonHierarchy(ring(b.poly)), height: b.h, extrudedHeight: b.h + 0.6, vertexFormat: PerInstanceColorAppearance.VERTEX_FORMAT }),
       attributes: { color: ColorGeometryInstanceAttribute.fromColor(C(b.kind === 'research' ? '#1f6b55' : '#0f2a33')) },
     }));
   }
@@ -92,7 +88,7 @@ function staticScene(scene) {
       position: pos(b.x, b.y, b.h + 6), text: b.short, font: '600 13px "Space Grotesk Variable", system-ui, sans-serif',
       fillColor: C('#d6e2e6'), outlineColor: C('#05090d'), outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE,
       verticalOrigin: VerticalOrigin.BOTTOM, horizontalOrigin: HorizontalOrigin.CENTER,
-      scaleByDistance: new NearFarScalar(150, 1.1, 1500, 0.55), disableDepthTestDistance: Number.POSITIVE_INFINITY, id: 'bld:' + b.id,
+      scaleByDistance: new NearFarScalar(200, 1.1, 2500, 0.5), disableDepthTestDistance: Number.POSITIVE_INFINITY, id: 'bld:' + b.id,
     });
   }
   const pts = scene.primitives.add(new PointPrimitiveCollection());
@@ -135,7 +131,7 @@ function create(container, { onPick } = {}) {
   const enu = Transforms.eastNorthUpToFixedFrame(pos(0, 0));
   scene.light = new DirectionalLight({ direction: Cartesian3.normalize(Matrix4.multiplyByPointAsVector(enu, new Cartesian3(0.45, 0.55, -0.7), new Cartesian3()), new Cartesian3()), intensity: 2.2 });
   const ctl = scene.screenSpaceCameraController;
-  ctl.minimumZoomDistance = 40; ctl.maximumZoomDistance = 2500; ctl.enableCollisionDetection = false;
+  ctl.minimumZoomDistance = 40; ctl.maximumZoomDistance = 4000; ctl.enableCollisionDetection = false;
 
   staticScene(scene);
   const dyn = scene.primitives.add(new PrimitiveCollection());
@@ -169,7 +165,7 @@ function create(container, { onPick } = {}) {
           attributes: { color: ColorGeometryInstanceAttribute.fromColor(C(CAM_COLOR[st], sel ? 0.4 : st === 'none' ? 0.06 : 0.16)) },
         }));
         lines.add({ positions: [pos(cam.x, cam.y, 0), pos(cam.x, cam.y, 7)], width: 2, material: Material.fromType('Color', { color: C('#4b6370') }) });
-        pts.add({ position: pos(cam.x, cam.y, 7), pixelSize: sel ? 14 : 10, color: C(CAM_COLOR[st]), outlineColor: C('#ffffff'), outlineWidth: 2, id: 'cam:' + cam.id, disableDepthTestDistance: Number.POSITIVE_INFINITY });
+        pts.add({ position: pos(cam.x, cam.y, 7), pixelSize: sel ? 14 : 10, color: C(CAM_COLOR[st]), outlineColor: C('#ffffff'), outlineWidth: 2, id: 'cam:' + cam.id, scaleByDistance: new NearFarScalar(250, 1, 2200, 0.5), disableDepthTestDistance: Number.POSITIVE_INFINITY });
         if (L.labels !== false) {
           labels.add({ position: pos(cam.x, cam.y, 7), text: cam.id, font: '600 10px "Space Grotesk Variable", system-ui, sans-serif', fillColor: C('#ffffff'), outlineColor: C('#05090d'), outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cartesian2(0, -14), horizontalOrigin: HorizontalOrigin.CENTER, scaleByDistance: new NearFarScalar(150, 1, 1200, 0.5), disableDepthTestDistance: Number.POSITIVE_INFINITY, id: 'cam:' + cam.id });
         }
@@ -237,9 +233,9 @@ function create(container, { onPick } = {}) {
   }, ScreenSpaceEventType.LEFT_CLICK);
 
   const VIEWS = {
-    overview: { x: 0, y: -520, z: 460, pitch: -40, heading: 0 },
-    top: { x: 0, y: -1, z: 900, pitch: -90, heading: 0 },
-    walk: { x: 40, y: -230, z: 260, pitch: -38, heading: 10 },
+    overview: { x: 20, y: -640, z: 560, pitch: -42, heading: 0 },
+    top: { x: 60, y: -40, z: 1500, pitch: -90, heading: 0 },
+    walk: { x: -150, y: -330, z: 380, pitch: -38, heading: 0 },
   };
   function view(name = 'overview', duration = 1.2) {
     const v = VIEWS[name] || VIEWS.overview;

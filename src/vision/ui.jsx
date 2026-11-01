@@ -41,7 +41,7 @@ export function AiStatus({ compact }) {
   );
 }
 
-const SUGGEST = ['CAM-G1', 'CAM-B1', 'CAM-W1', 'CAM-C1', 'CAM-D2'];
+const SUGGEST = ['CAM-G1', 'CAM-A1', 'CAM-B1', 'CAM-W1', 'CAM-K1'];
 
 // Guard → Cameras: plug in webcams (laptop) or use the phone camera (Android app).
 export function CamConnect() {
@@ -67,7 +67,7 @@ export function CamConnect() {
       setDevices(d);
       const used = new Set(Object.keys(live));
       const p = {};
-      d.forEach((dev, i) => { const slot = Object.values(live).find((s) => s.deviceId === dev.id); p[dev.id] = slot ? slot.camId : SUGGEST.filter((c) => !used.has(c))[i] || 'CAM-B2'; });
+      d.forEach((dev, i) => { const slot = Object.values(live).find((s) => s.deviceId === dev.id); p[dev.id] = slot ? slot.camId : SUGGEST.filter((c) => !used.has(c))[i] || 'CAM-F1'; });
       setPick(p);
       loadVision().catch(() => {});
     } catch (e) { setErr(e.message); }
@@ -130,7 +130,7 @@ export function CamConnect() {
           <button type="button" onClick={() => setDevices(null)} className="text-xs font-semibold text-slate-500">Done</button>
         </div>
       )}
-      <p className="text-[11px] text-slate-500">Tip: assign a camera to <b className="text-slate-700">CAM-G1</b> (gate) to scan students' QR passes and count tailgating, <b className="text-slate-700">CAM-B1</b> (path) for following, running and falls, <b className="text-slate-700">CAM-W1</b> (wall) for line crossing.</p>
+      <p className="text-[11px] text-slate-500">Tip: assign a camera to <b className="text-slate-700">CAM-G1</b> (gate) to scan students' QR passes and count tailgating, <b className="text-slate-700">CAM-A1</b> or <b className="text-slate-700">CAM-B1</b> (walk route) for following, running and falls, <b className="text-slate-700">CAM-W1</b> (wall) for line crossing.</p>
     </Card>
   );
 }
