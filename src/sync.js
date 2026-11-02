@@ -139,8 +139,8 @@ export class HubClient {
   }
 
   // queue an action; returns once the hub has it (or it is safely queued)
-  send(name, args, gender) {
-    this.outbox.push({ id: rid(), name, args, gender, at: Date.now() });
+  send(name, args, who) {
+    this.outbox.push({ id: rid(), name, args, who, at: Date.now() });
     ls.set(OUTBOX_KEY, this.outbox);
     this.setStatus(this.status);
     this.flush();

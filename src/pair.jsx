@@ -11,7 +11,7 @@ export const loadDeviceName = (fallback) => { try { return localStorage.getItem(
 const saveDeviceName = (n) => { try { localStorage.setItem(NAME_KEY, n); } catch (e) { /* ignore */ } };
 
 const STATUS = {
-  local: ['Stand-alone', 'bg-white/10 text-slate-300', 'bg-slate-400'],
+  local: ['Stand-alone', 'bg-white/10 text-slate-600', 'bg-slate-500'],
   connecting: ['Connecting…', 'bg-amber-500/15 text-amber-300', 'bg-amber-400'],
   online: ['Synced', 'bg-emerald-500/15 text-emerald-300', 'bg-emerald-400'],
   offline: ['Hub offline', 'bg-red-500/15 text-red-300', 'bg-red-400'],

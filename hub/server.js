@@ -12,7 +12,7 @@ import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ADMIN_ONLY, applyAction } from '../src/actions.js';
-import { STATE_VERSION, makeInitial } from '../src/data.js';
+import { makeInitial, migrate } from '../src/data.js';
 import { tick, toast } from '../src/store.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -42,14 +42,14 @@ const saveConfig = () => writeJson(CONFIG_FILE, config);
 saveConfig();
 
 let state = (() => {
-  const s = readJson(STATE_FILE);
-  if (s && s.v === STATE_VERSION) { s.toasts = []; return s; }
+  const s = migrate(readJson(STATE_FILE));
+  if (s) { s.toasts = []; return s; }
   return makeInitial();
 })();
 let version = 1;
 let stateJson = null;
 let saveTimer = null;
-const presence = {}; // dev -> { live, role, gender, seen, ip, online }
+const presence = {}; // dev -> { live, role, user, seen, ip, online }
 
 function trim(d) {
   if (d.audit.length > 3000) d.audit.length = 3000;
@@ -61,7 +61,7 @@ function trim(d) {
 function netInfo() {
   const devices = Object.entries(config.devices).map(([id, x]) => {
     const p = presence[id] || {};
-    return { id, name: x.name, kind: x.kind, pairedAt: x.pairedAt, role: p.role || null, live: p.live || [], online: !!p.online, seen: p.seen || null };
+    return { id, name: x.name, kind: x.kind, pairedAt: x.pairedAt, role: p.role || null, user: p.user || null, live: p.live || [], online: !!p.online, seen: p.seen || null };
   });
   const c = presence.console;
   if (c) devices.push({ id: 'console', name: 'Security laptop', kind: 'laptop', role: 'admin', live: c.live || [], online: !!c.online, seen: c.seen || null });
@@ -215,10 +215,10 @@ async function api(req, res, url) {
     const b = await readBody(req);
     if (b.id && applied.includes(b.id)) return send(res, 200, snapshotJson());
     if (ADMIN_ONLY.has(b.name) && !local) return send(res, 403, { error: 'Only the laptop console can do that' });
-    if (b.name === 'setGender') return send(res, 400, { error: 'setGender is per device' });
+    // the console acts as the security office; a phone acts as its signed-in person
+    const who = b.who && typeof b.who === 'object' && b.who.role !== 'admin' ? b.who : null;
     try {
-      if (b.gender === 'female' || b.gender === 'male') state.gender = b.gender;
-      applyAction(state, b.name, Array.isArray(b.args) ? b.args : []);
+      applyAction(state, b.name, Array.isArray(b.args) ? b.args : [], who);
       trim(state);
     } catch (e) {
       log(`Action ${b.name} failed: ${e.message}`);
@@ -233,10 +233,10 @@ async function api(req, res, url) {
     const b = await readBody(req);
     const prev = presence[devId] || {};
     const live = Array.isArray(b.live) ? b.live.map(String).slice(0, 32).sort() : [];
-    const next = { live, role: b.role || null, gender: b.gender || null, seen: Date.now(), ip, online: true };
+    const next = { live, role: b.role || null, user: b.user ? String(b.user).slice(0, 60) : null, seen: Date.now(), ip, online: true };
     presence[devId] = next;
     if (devEntry && b.name && b.name !== devEntry[1].name) { devEntry[1].name = String(b.name).slice(0, 40); saveConfig(); }
-    if (!prev.online || prev.role !== next.role || JSON.stringify(prev.live || []) !== JSON.stringify(live)) bump();
+    if (!prev.online || prev.role !== next.role || prev.user !== next.user || JSON.stringify(prev.live || []) !== JSON.stringify(live)) bump();
     return send(res, 200, { ok: true });
   }
 
@@ -267,7 +267,7 @@ async function api(req, res, url) {
     return send(res, 200, { ok: true });
   }
   if (p === '/api/reset' && req.method === 'POST') {
-    state = makeInitial(state.gender);
+    state = makeInitial();
     toast(state, 'all', 'All campus data erased on the hub. Starting fresh.', 'success');
     log('All campus data erased');
     bump();

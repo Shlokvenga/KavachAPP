@@ -4,7 +4,7 @@
 // when phones are paired, on the laptop hub too, so nothing here may use React or
 // browser-only APIs without a guard. src/actions.js names them.
 import {
-  ALERT_TYPES, CP, ESCALATE_MS, MIN, ROUTES, camById, camsAt, cpShort, distM, fmtTime, presence, studentById, studentOf, verifyQr,
+  ALERT_TYPES, CP, ESCALATE_MS, MIN, POSTS, ROUTES, camById, camsAt, cpShort, distM, fmtTime, presence, studentById, studentOf, verifyQr,
 } from './data.js';
 import { RULES } from './vision/rules.js';
 
@@ -23,15 +23,43 @@ export function audit(d, who, action, reason, cat = 'footage') {
   d.audit.unshift({ id: 'au' + ++d.seq, who, action, reason, cat, time: Date.now() });
 }
 
-export const guardById = (d, id) => d.guards.find((g) => g.id === id);
-export const nearestGuard = (d, cpId) => [...d.guards].sort((a, b) => distM(a, CP[cpId]) - distM(b, CP[cpId]))[0];
+// With no guard signed in, alerts and walks go to the security office.
+const OFFICE = { id: null, name: 'Security office', post: 'Control room', x: 0, y: 0 };
+export const guardById = (d, id) => (id && d.guards.find((g) => g.id === id)) || { ...OFFICE };
+export const guardLabel = (g) => (g && g.id ? `Guard ${g.name}` : 'The security office');
+const nearestOf = (list, p) => [...list].sort((a, b) => distM(a, p) - distM(b, p))[0] || null;
+export const nearestGuard = (d, cpId) => nearestOf(d.guards, CP[cpId]);
+
+// Every action carries the signed-in person (`who`), so the hub and every
+// paired phone know them. Guards are on duty from sign-in until sign-out.
+const clip = (v, n = 60) => String(v == null ? '' : v).slice(0, n);
+export function upsertUser(d, who) {
+  if (!who || !who.id || !['student', 'guard'].includes(who.role)) return;
+  const u = {
+    id: clip(who.id, 16), role: who.role, email: clip(who.email, 80), name: clip(who.name), first: clip(who.first, 30),
+    gender: who.gender === 'male' ? 'male' : 'female', dept: clip(who.dept), year: clip(who.year, 20),
+    hostel: clip(who.hostel, 10), room: clip(who.room, 12), phone: clip(who.phone, 20), post: clip(who.post, 10),
+  };
+  d.users[u.id] = u;
+  if (u.role !== 'guard') return;
+  const p = POSTS[u.post] || POSTS.gate;
+  let g = d.guards.find((x) => x.id === u.id);
+  if (!g) { g = { id: u.id, x: p.x, y: p.y }; d.guards.push(g); }
+  else if (g.postId !== u.post) { g.x = p.x; g.y = p.y; }
+  Object.assign(g, { name: u.first, full: u.name, post: p.label, postId: u.post, female: u.gender === 'female' });
+}
+
+export function signOut(d) {
+  const me = d.me;
+  if (me && me.role === 'guard') d.guards = d.guards.filter((g) => g.id !== me.id);
+}
 
 export function createAlert(d, { type, cp, detail, photo = null, walk = false, assign = null, cam = null, student = null }) {
-  const g = assign ? guardById(d, assign) : nearestGuard(d, cp);
+  const g = (assign && d.guards.find((x) => x.id === assign)) || nearestGuard(d, cp);
   const a = {
     id: 'AL-' + ++d.seq, type, cp, detail, photo, walk, cam: cam || camsAt(cp)[0] || null,
     time: Date.now(), status: 'new', escalated: false,
-    assigned: g.id, acceptedBy: null, lights: false, speaker: false, resolvedBy: null, note: null, student,
+    assigned: g ? g.id : null, acceptedBy: null, lights: false, speaker: false, resolvedBy: null, note: null, student,
   };
   d.alerts.unshift(a);
   toast(d, 'guard', `${ALERT_TYPES[type].label} · ${CP[cp].name}`, 'alert');
@@ -83,11 +111,6 @@ export function gateScan(d, dir) {
   logGate(d, studentOf(d).id, dir, 'Main Gate');
 }
 
-export function setGender(d, gender) {
-  if (d.walk && d.walk.phase === 'active') { toast(d, 'student', 'Finish your Saathi Walk before switching student', 'warn'); return; }
-  d.gender = gender;
-}
-
 const walkStudent = (w) => ({ id: w.sid, name: w.name, gender: w.gender });
 
 // ---------- student: Saathi Walk ----------
@@ -95,6 +118,14 @@ const walkStudent = (w) => ({ id: w.sid, name: w.name, gender: w.gender });
 export const myWalk = (s) => (s.walk && s.walk.sid === studentOf(s).id ? s.walk : null);
 export const lastPassed = (w) => [...w.steps].reverse().find((s) => s.status === 'passed');
 export const nextStep = (w) => w.steps.find((s) => s.status !== 'passed');
+
+// The guard at the route's post watches the walk, else the nearest one on duty
+// (a female guard if the student asked for one and one is on duty).
+export function walkGuard(d, r, femaleGuard) {
+  const women = d.guards.filter((g) => g.female);
+  const pool = femaleGuard && women.length ? women : d.guards;
+  return pool.find((g) => g.postId === r.post) || nearestOf(pool, CP[r.steps[r.steps.length - 1].cp]);
+}
 
 // `snap` is an anonymised frame from a real camera at the checkpoint, if one is connected.
 export function startWalk(d, destKey, sharing, { femaleGuard = false, snap = null } = {}) {
@@ -113,7 +144,7 @@ export function startWalk(d, destKey, sharing, { femaleGuard = false, snap = nul
     gender: st.gender,
     femaleGuard,
     dest: destKey,
-    guard: femaleGuard ? 'sunita' : r.guard,
+    guard: (walkGuard(d, r, femaleGuard) || {}).id || null,
     startedAt: now,
     phase: 'active',
     sharing: !!sharing,
@@ -127,7 +158,7 @@ export function startWalk(d, destKey, sharing, { femaleGuard = false, snap = nul
   };
   const g = guardById(d, d.walk.guard);
   toast(d, 'student', snap ? `Photo captured at checkpoint A · ${fmtTime(now)}` : `Checked in at checkpoint A · ${fmtTime(now)}`, 'success');
-  toast(d, 'guard', `Saathi Walk started: ${st.name} → ${r.dest} (watching: ${g.name})`, 'info');
+  toast(d, 'guard', `Saathi Walk started: ${st.name} → ${r.dest} (watching: ${g.id ? g.name : 'any guard'})`, 'info');
 }
 
 export function passNext(d, snap = null) {
@@ -192,7 +223,7 @@ export function raiseMissed(d) {
   });
   w.missing = { stage: 'alerted' };
   w.missedAlert = a.id;
-  toast(d, 'student', `Guard ${guardById(d, w.guard).name} has been alerted`, 'warn', w.sid);
+  toast(d, 'student', `${guardLabel(guardById(d, w.guard))} has been alerted`, 'warn', w.sid);
 }
 
 export function answerOk(d) {
@@ -215,7 +246,7 @@ export function sos(d) {
     student: walkStudent(w),
   });
   w.sosAlert = a.id;
-  toast(d, 'student', `SOS sent. Guard ${guardById(d, w.guard).name} notified.`, 'alert', w.sid);
+  toast(d, 'student', `SOS sent. ${guardLabel(guardById(d, w.guard))} notified.`, 'alert', w.sid);
   vibrate([400, 100, 400]);
 }
 
@@ -245,16 +276,18 @@ export function follower(d) {
   w.followerAt = Date.now();
   w.followerAlert = a.id;
   vibrate([120, 60, 120, 60, 120]);
-  toast(d, 'student', `Guard ${g.name} notified discreetly`, 'warn', w.sid);
+  toast(d, 'student', `${guardLabel(g)} notified discreetly`, 'warn', w.sid);
 }
 
 // ---------- guard ----------
 export function acceptAlert(d, id, guardId) {
   const a = findAlert(d, id);
-  const g = guardById(d, guardId);
+  const g = d.guards.find((x) => x.id === guardId);
+  if (!a || !g || a.status === 'resolved') return;
   const cp = CP[a.cp];
   a.status = 'accepted';
   a.acceptedBy = guardId;
+  a.acceptedName = g.name;
   a.acceptedAt = Date.now();
   a.dist = distM(g, cp);
   a.from = { x: g.x, y: g.y };
@@ -280,16 +313,19 @@ export function playSpeaker(d, id) {
 
 export function resolveAlert(d, id, guardId) {
   const a = findAlert(d, id);
+  if (!a) return;
   a.status = 'resolved';
   a.resolvedAt = Date.now();
   a.resolvedBy = guardId;
   if (!a.acceptedBy) a.acceptedBy = guardId;
+  if (!a.acceptedName) a.acceptedName = guardById(d, guardId).name;
   if ((a.type === 'tamper' || a.type === 'camoffline') && a.cam && d.cams[a.cam]) {
     d.cams[a.cam].status = 'none';
     d.cams[a.cam].since = Date.now();
     a.note = a.note || `${a.cam} checked and fixed.`;
   }
   const g = guardById(d, guardId);
+  a.resolvedName = g.name;
   toast(d, 'guard', `${a.id} resolved by ${g.name}`, 'success');
   toast(d, 'admin', `${a.id} resolved by ${g.name}`, 'success');
   if (a.walk) toast(d, 'student', `Guard ${g.name} marked your alert resolved`, 'success', a.student && a.student.id);
@@ -362,7 +398,7 @@ export function reportDarkSpot(d, cp) {
 export function equipmentLeaving(d, itemId = 'osc4') {
   const it = d.inventory.find((i) => i.id === itemId);
   if (it.holder) {
-    const who = studentById(it.holder);
+    const who = studentById(d, it.holder);
     toast(d, 'guard', `${it.name} passed lab door. Issued to ${who ? who.name : it.holder}. Allowed ✓`, 'success');
     toast(d, 'admin', `${it.name} left lab: issued to ${it.holder}. No alert`, 'success');
     toast(d, 'student', `${it.name} checked out on your account at lab door`, 'info', it.holder);
@@ -410,7 +446,7 @@ export function returnItem(d, issueId, missing) {
   it.stock += is.qty - missing;
   if (it.rfid) it.holder = null;
   if (is.qty > 1) d.returnCount += 1;
-  if (missing) toast(d, 'admin', `Short return: ${missing} ${it.short} missing (${(studentById(is.sid) || {}).name || is.sid})`, 'warn');
+  if (missing) toast(d, 'admin', `Short return: ${missing} ${it.short} missing (${(studentById(d, is.sid) || {}).name || is.sid})`, 'warn');
   toast(d, 'student', missing ? `Returned with ${missing} ${it.short} reported missing` : `Returned: ${is.qty} × ${is.name} ✓`, missing ? 'warn' : 'success', is.sid);
 }
 
@@ -444,7 +480,7 @@ export function gateQr(d, camId, text, face) {
   const q = verifyQr(text);
   const now = Date.now();
   const rec = { id: 'GQ-' + ++d.seq, cam: camId, time: now, ok: false, reason: q.reason || '', face: face || null };
-  const holder = q.ok ? studentById(q.id) : null;
+  const holder = q.ok ? studentById(d, q.id) : null;
   if (q.ok && d.ai.used.includes(text)) { rec.reason = 'Code already used (one scan per code)'; }
   else if (q.ok && !holder) { rec.reason = 'Unknown student ID'; }
   else if (q.ok) {

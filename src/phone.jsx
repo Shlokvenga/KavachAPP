@@ -1,23 +1,21 @@
-// Phone edition (the Android app and the phone web app): Student and Guard only.
-// The Admin console is in the laptop edition (src/laptop.jsx), served by the hub.
+// Phone edition (the Android app and the phone web app): sign in, then the Student
+// or Guard app for that account. The Admin console is in the laptop edition
+// (src/laptop.jsx), served by the hub.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { GENDER, STUDENTS, cls, pad } from './data.js';
+import { GENDER, cls, pad } from './data.js';
 import { AppCtx, useApp } from './ctx.js';
 import { useKavach } from './useKavach.js';
 import { parsePairText } from './sync.js';
 import { PairSheet, SyncChip, loadDeviceName } from './pair.jsx';
-import { GenderSwitch } from './student.jsx';
-import { Avatar, Btn, Icon, Logo, Toasts } from './ui.jsx';
-import { CAMPUS_SHORT } from './campus.js';
+import { currentUser, fingerprintOn, logout, removeAccount } from './auth.js';
+import { isNative, moveToBackground, onBackButton } from './native.js';
+import { BACK, runBack, useBack } from './back.js';
+import { AuthScreen, LockScreen } from './login.jsx';
+import { Logo, Toasts } from './ui.jsx';
 import StudentApp from './student.jsx';
 import GuardApp from './guard.jsx';
 
-const ROLES = [
-  { id: 'student', label: 'Student', icon: 'user', title: 'Student app', who: '', desc: 'Rotating QR ID, Saathi Walk night escort, LabLedger and your privacy.' },
-  { id: 'guard', label: 'Guard', icon: 'shield', title: 'Guard console', who: 'Ramesh, Sunita, Imran', desc: 'Live alerts, CCTV camera wall with PTZ and talk-down, campus map.' },
-];
-const ROLE_IDS = ROLES.map((r) => r.id);
 const APPS = { student: StudentApp, guard: GuardApp };
 
 function useMedia(q) {
@@ -39,54 +37,66 @@ function pairFromUrl() {
 }
 
 function App() {
-  const [started, setStarted] = useState(false);
-  const [role, setRoleState] = useState(() => { try { const r = localStorage.getItem('kavach-role'); return ROLE_IDS.includes(r) ? r : 'student'; } catch (e) { return 'student'; } });
-  const [split, setSplit] = useState(false);
-  const [gen, setGen] = useState(0);
+  const [user, setUser] = useState(() => currentUser());
+  // with fingerprint login on, the app asks for it each time it starts
+  const [locked, setLocked] = useState(() => !!user && isNative() && fingerprintOn(user.email));
   const [pairOpen, setPairOpen] = useState(() => pairFromUrl());
-  // Inside the Android app (Capacitor) we always run full screen, never in a phone frame.
-  const native = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  const native = isNative();
   const wide = useMedia('(min-width: 768px)') && !native;
-  const xl = useMedia('(min-width: 960px)') && !native;
-  const splitOn = split && xl;
+  const me = user && !locked ? user : null;
+  const role = me ? me.role : null;
 
-  const k = useKavach({ edition: 'phone', role: started ? role : null, deviceName: loadDeviceName(role === 'guard' ? 'Guard phone' : 'Student phone') });
-  const setRole = useCallback((r) => { setRoleState(r); setStarted(true); try { localStorage.setItem('kavach-role', r); } catch (e) { /* ignore */ } }, []);
-  const kReset = k.reset;
-  const reset = useCallback(() => { if (kReset()) setGen((g) => g + 1); }, [kReset]);
+  const k = useKavach({ edition: 'phone', role, me, deviceName: loadDeviceName(role === 'guard' ? 'Guard phone' : 'Student phone') });
+  const { act, actAs, s } = k;
+
+  // Android back: close what is open, go back a page, return to Home; at the very
+  // start, move the app to the background (it stays signed in) instead of quitting.
+  useEffect(() => onBackButton(() => { if (!runBack()) moveToBackground(); }), []);
+  useBack(() => setPairOpen(false), !!pairOpen, BACK.sheet);
+
+  // make sure the campus (and the hub) knows who is signed in; a guard goes on duty
+  const known = !!(me && s.users[me.id]);
+  useEffect(() => { if (me && !known) act('hello'); }, [me, known, act]);
+
+  const signOut = useCallback(() => {
+    if (!window.confirm('Log out of Kavach on this phone?')) return;
+    act('signOut');
+    logout();
+    setUser(null);
+  }, [act]);
+  const removeMe = useCallback(() => {
+    if (!user || !window.confirm(`Remove ${user.email} from this phone? You will need to create the account again to use it here.`)) return;
+    act('signOut');
+    removeAccount(user.email);
+    setUser(null);
+  }, [act, user]);
+  const lockLogout = useCallback(() => { actAs(user, 'signOut'); logout(); setUser(null); setLocked(false); }, [actAs, user]);
   const openPair = useCallback(() => setPairOpen(true), []);
 
-  const ctx = useMemo(() => ({ ...k, role, setRole, split: splitOn, reset, roles: ROLE_IDS, openPair }), [k, role, setRole, splitOn, reset, openPair]);
+  const ctx = useMemo(() => ({ ...k, role, user: me, signOut, removeMe, roles: role ? [role] : [], openPair }), [k, role, me, signOut, removeMe, openPair]);
 
-  const phone = (r, key) => (
-    <Phone key={key} framed={wide} role={r}>
-      {r === 'start' ? <StartScreen onOpen={setRole} /> : <RoleApp role={r} />}
-    </Phone>
-  );
+  let screen;
+  if (!user) screen = <AuthScreen onSignedIn={(u) => { setUser(u); setLocked(false); }} />;
+  else if (locked) screen = <LockScreen user={user} onUnlock={() => setLocked(false)} onLogout={lockLogout} />;
+  else { const RoleApp = APPS[user.role] || StudentApp; screen = <RoleApp />; }
 
+  const theme = me && me.role === 'student' ? GENDER[me.gender].theme : null;
   return (
     <AppCtx.Provider value={ctx}>
       {wide ? (
         <div className="desk-bg flex min-h-screen flex-col items-center">
-          <TopBar started={started} setStarted={setStarted} split={splitOn} setSplit={setSplit} canSplit={xl} />
-          <div className="flex w-full flex-1 items-start justify-center gap-6 px-4 pb-6">
-            {splitOn ? (
-              ROLES.map((r) => (
-                <div key={r.id + gen} className="flex flex-col items-center gap-2">
-                  <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-600"><Icon name={r.icon} className="h-4 w-4" />{r.title}</div>
-                  {phone(r.id, r.id + gen)}
-                </div>
-              ))
-            ) : (
-              <>
-                <DemoGuide />
-                {phone(started ? role : 'start', (started ? role : 'start') + gen)}
-              </>
-            )}
-          </div>
+          <header className="flex w-full max-w-[1240px] items-center gap-3 px-6 py-4">
+            <Logo className="h-9 w-9" />
+            <span className="flex-1">
+              <span className="block font-display text-xl font-bold uppercase leading-none tracking-[.08em] text-brand">Kavach</span>
+              <span className="block text-[11px] font-medium text-slate-500">Phone edition · open it on a phone, or install the Android app</span>
+            </span>
+            <SyncChip onClick={openPair} className="h-9" />
+          </header>
+          <Phone framed theme={theme} role={role}>{screen}</Phone>
         </div>
       ) : (
-        phone(started ? role : 'start', (started ? role : 'start') + gen)
+        <Phone theme={theme} role={role}>{screen}</Phone>
       )}
       {pairOpen && (
         <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/60 md:items-center">
@@ -99,33 +109,20 @@ function App() {
   );
 }
 
-function RoleApp({ role }) {
-  const App = APPS[role];
-  return <App />;
-}
-
-function Phone({ framed, role, children }) {
-  const { setRole, s, openPair } = useApp();
-  const showBar = !framed && role !== 'start';
+function Phone({ framed, theme, role, children }) {
+  const { s } = useApp();
   const allToasts = s.toasts.filter((t) => t.role === 'all');
   // Overlays (sheets, camera viewer, prompts) are absolutely positioned inside the
-  // content box below the status bar / role bar, so they never hide under it.
+  // content box below the status bar, so they never hide under it.
   const inner = (
-    <div data-phone={role} className={cls('flex h-full w-full flex-col overflow-hidden bg-slate-50', role === 'student' && GENDER[s.gender].theme)}>
-      {framed && <StatusBar dark={role !== 'start' && role !== 'student'} />}
-      {showBar && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-line bg-[#060c11] px-3 py-1.5 pt-[max(6px,env(safe-area-inset-top))]">
-          <Logo className="h-6 w-6" />
-          <RoleSwitch value={role} onChange={setRole} compact />
-          <SyncChip onClick={openPair} className="!px-2" />
-        </div>
-      )}
+    <div data-phone={role || 'signin'} className={cls('flex h-full w-full flex-col overflow-hidden bg-slate-50', theme, !framed && 'pt-[env(safe-area-inset-top)]')}>
+      {framed && <StatusBar />}
       <div className="relative flex min-h-0 flex-1 flex-col">
         {children}
-        {role !== 'start' && <Toasts role={role} />}
+        {role && <Toasts role={role} />}
         {allToasts.length > 0 && (
-          <div className="toast-in absolute inset-x-3 top-2 z-[70] flex items-center gap-2 rounded-2xl bg-emerald-600 px-3.5 py-3 text-sm font-medium text-white shadow-xl">
-            <Icon name="checkCircle" />{allToasts[allToasts.length - 1].msg}
+          <div className="toast-in absolute inset-x-3 top-2 z-[70] rounded-2xl bg-emerald-600 px-3.5 py-3 text-sm font-medium text-white shadow-xl">
+            {allToasts[allToasts.length - 1].msg}
           </div>
         )}
       </div>
@@ -141,161 +138,17 @@ function Phone({ framed, role, children }) {
   );
 }
 
-function StatusBar({ dark }) {
+function StatusBar() {
   const { now } = useApp();
   const d = new Date(now);
   return (
-    <div className={cls('relative z-[75] flex h-11 shrink-0 items-center justify-between px-7 pt-1 text-[13px] font-semibold', dark ? 'bg-[#060c11] text-white' : 'bg-slate-50 text-slate-900')}>
+    <div className="relative z-[75] flex h-11 shrink-0 items-center justify-between bg-ink px-7 pt-1 text-[13px] font-semibold text-white">
       <span className="tabular-nums">{d.getHours() % 12 || 12}:{pad(d.getMinutes())}</span>
       <span className="flex items-center gap-1.5">
         <svg width="17" height="11" viewBox="0 0 17 11" fill="currentColor" aria-hidden="true"><rect x="0" y="7" width="3" height="4" rx="1" /><rect x="4.5" y="5" width="3" height="6" rx="1" /><rect x="9" y="2.5" width="3" height="8.5" rx="1" /><rect x="13.5" y="0" width="3" height="11" rx="1" /></svg>
-        <span className="text-[11px]">4G</span>
         <svg width="25" height="12" viewBox="0 0 25 12" fill="none" aria-hidden="true"><rect x=".5" y=".5" width="21" height="11" rx="3" stroke="currentColor" opacity=".5" /><rect x="2" y="2" width="15" height="8" rx="1.8" fill="currentColor" /><rect x="22.5" y="4" width="2" height="4" rx="1" fill="currentColor" opacity=".5" /></svg>
       </span>
     </div>
-  );
-}
-
-function RoleSwitch({ value, onChange, compact, light }) {
-  return (
-    <div className={cls('flex flex-1 rounded-full p-1 ring-1 ring-line', light ? 'bg-card' : 'bg-white/5')} role="tablist" aria-label="Switch role">
-      {ROLES.map((r) => {
-        const on = r.id === value;
-        return (
-          <button key={r.id} type="button" role="tab" aria-selected={on} onClick={() => onChange(r.id)}
-            className={cls('flex flex-1 items-center justify-center gap-1.5 rounded-full font-semibold transition',
-              compact ? 'h-7 text-xs' : 'h-10 text-sm',
-              on ? 'bg-brand text-ink shadow-[0_0_14px_-4px_rgb(var(--brand)/0.8)]' : 'text-slate-500 hover:text-slate-900')}>
-            {!compact && <Icon name={r.icon} className="h-4 w-4" />}{r.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function StartScreen({ onOpen }) {
-  const { s } = useApp();
-  const [pick, setPick] = useState('student');
-  const r = ROLES.find((x) => x.id === pick);
-  return (
-    <div className="no-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto bg-gradient-to-b from-brand/15 via-ink to-ink text-white">
-      <div className="px-5 pt-4"><RoleSwitch value={pick} onChange={setPick} /></div>
-      <div className="flex flex-col items-center px-6 pt-7 text-center">
-        <div className="relative">
-          <span className="pulse-soft absolute inset-0 rounded-[26px] bg-brand/30" />
-          <div className="relative grid h-24 w-24 place-items-center rounded-[26px] bg-ink p-2 shadow-[0_0_40px_-8px_rgb(var(--brand)/0.6)] ring-1 ring-brand/40"><Logo className="h-full w-full" /></div>
-        </div>
-        <h1 className="mt-5 font-display text-[44px] font-bold uppercase leading-none tracking-[.08em]">Kavach</h1>
-        <p className="mt-2 text-sm font-medium text-white/80">Smart campus safety and asset protection</p>
-        <p className="mt-4 font-mono text-[12px] uppercase tracking-[.12em] text-brand">Identify at the doors · anonymous in between</p>
-      </div>
-
-      <div className="mt-7 px-5">
-        <div key={pick} className={cls('fade-up rounded-3xl bg-card p-5 text-slate-900 shadow-xl ring-1 ring-line', pick === 'student' && GENDER[s.gender].theme)}>
-          <div className="flex items-center gap-3">
-            {pick === 'student' ? <Avatar size={52} gender={s.gender} /> : (
-              <span className="grid h-[52px] w-[52px] place-items-center rounded-2xl bg-brand text-ink"><Icon name={r.icon} className="h-6 w-6" /></span>
-            )}
-            <div>
-              <div className="font-display text-xl font-semibold">{r.title}</div>
-              <div className="text-xs text-slate-500">{pick === 'student' ? `${STUDENTS[s.gender].name} · ${STUDENTS[s.gender].id}` : r.who}</div>
-            </div>
-          </div>
-          <p className="mt-3 text-sm text-slate-600">{r.desc}</p>
-          {pick === 'student' && <GenderSwitch className="mt-3" />}
-          <Btn v="accent" size="lg" className="mt-4 w-full" onClick={() => onOpen(pick)}>Open {r.label.toLowerCase()} app<Icon name="chevR" /></Btn>
-        </div>
-      </div>
-
-      <div className="mt-4 px-5"><HubCard /></div>
-
-      <div className="mt-6 space-y-3 px-5 pb-8">
-        {[
-          ['qr', 'Verified at the doors', 'Rotating QR + 1:1 face match at gate, labs and hostels.'],
-          ['video', 'Anonymous in between', 'CCTV looks for danger, never for names. Faces stay blurred.'],
-          ['moon', 'Saathi Walk', 'Opt-in night escort. Photos deleted when you reach.'],
-        ].map(([ic, t, d]) => (
-          <div key={t} className="flex items-start gap-3 rounded-2xl bg-white/[.07] p-3 ring-1 ring-white/10">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-accent/20 text-accent"><Icon name={ic} className="h-5 w-5" /></span>
-            <div><div className="text-sm font-semibold">{t}</div><div className="text-xs text-white/65">{d}</div></div>
-          </div>
-        ))}
-        <p className="pt-2 text-center text-[11px] text-white/50">Prototype for {CAMPUS_SHORT} · starts empty, everything shown comes from what you do · Priya and Aarav are demo students</p>
-      </div>
-    </div>
-  );
-}
-
-function HubCard() {
-  const { mode, pairing, sync, openPair } = useApp();
-  return (
-    <button type="button" onClick={openPair} className="flex w-full items-center gap-3 rounded-2xl bg-white/[.07] p-3 text-left ring-1 ring-white/10 hover:ring-brand/50">
-      <span className={cls('grid h-9 w-9 shrink-0 place-items-center rounded-xl', mode === 'hub' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-brand/20 text-brand')}><Icon name="wifi" className="h-5 w-5" /></span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold">{mode === 'hub' ? `Campus hub · ${pairing.hub || pairing.url}` : 'Connect to the campus hub'}</span>
-        <span className="block text-xs text-white/65">{mode === 'hub' ? (sync.status === 'online' ? 'Synced live with the security laptop' : 'Hub not reachable. Actions are kept and sent later.') : 'Pair with the security laptop to share alerts live. Works on its own until then.'}</span>
-      </span>
-    </button>
-  );
-}
-
-function TopBar({ started, setStarted, split, setSplit, canSplit }) {
-  const { role, setRole, reset, openPair } = useApp();
-  return (
-    <header className="flex w-full max-w-[1240px] items-center gap-4 px-6 py-4">
-      <button type="button" onClick={() => { setStarted(false); setSplit(false); }} className="flex items-center gap-2.5 text-left">
-        <Logo className="h-9 w-9" />
-        <span>
-          <span className="block font-display text-xl font-bold uppercase leading-none tracking-[.08em] text-brand">Kavach</span>
-          <span className="block text-[11px] font-medium text-slate-500">Identify at the doors, anonymous in between.</span>
-        </span>
-      </button>
-      <div className="mx-auto w-full max-w-[360px]">
-        {!split && <RoleSwitch value={started ? role : null} onChange={setRole} light />}
-      </div>
-      <div className="flex items-center gap-2">
-        {canSplit && (
-          <Btn v={split ? 'primary' : 'outline'} size="sm" icon="columns" onClick={() => setSplit(!split)}>{split ? 'Single view' : 'Side by side'}</Btn>
-        )}
-        {started && !split && <Btn v="outline" size="sm" icon="home" onClick={() => setStarted(false)}>Start screen</Btn>}
-        <SyncChip onClick={openPair} className="h-9" />
-        <Btn v="outline" size="sm" icon="refresh" onClick={reset}>Reset</Btn>
-      </div>
-    </header>
-  );
-}
-
-const GUIDE = [
-  ['student', 'Pick a student', 'Female (pink) or male (blue). Unlock My ID and simulate a gate scan, then scan again to see anti-passback.'],
-  ['guard', 'Connect cameras', 'Guard → Cameras → Find cameras. Assign your webcam to a camera, e.g. CAM-A1 at the Library, and walk in front of it.'],
-  ['student', 'Saathi Walk', 'Help me get home → Start. With a camera at the Library the check-in photo is real (anonymised). Try Go missing.'],
-  ['guard', 'Respond', 'Accept the alert, open the live camera, play the speaker warning, resolve it.'],
-]
-
-function DemoGuide() {
-  const { setRole } = useApp();
-  return (
-    <aside className="sticky top-4 hidden w-[280px] shrink-0 lg:block">
-      <div className="rounded-3xl bg-card/80 p-5 shadow-sm ring-1 ring-line backdrop-blur">
-        <div className="flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-wider text-brand"><Icon name="zap" className="h-4 w-4" />5-minute demo</div>
-        <div className="mt-2 font-display text-lg font-bold text-slate-900">Kavach at {CAMPUS_SHORT}</div>
-        <ol className="mt-3 space-y-3">
-          {GUIDE.map(([r, t, d], i) => (
-            <li key={t}>
-              <button type="button" onClick={() => setRole(r)} className="group flex gap-3 text-left">
-                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-xs font-bold text-white">{i + 1}</span>
-                <span>
-                  <span className="block text-sm font-semibold text-slate-900 group-hover:text-brand group-hover:underline">{t}</span>
-                  <span className="block text-xs text-slate-500">{d}</span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ol>
-        <p className="mt-4 border-t border-slate-200 pt-3 text-xs text-slate-500">This is the phone edition (Student and Guard). The <b>Admin console</b> with the 3D twin runs on the security laptop: start the Kavach hub there and pair phones from its Setup page.</p>
-      </div>
-    </aside>
   );
 }
 

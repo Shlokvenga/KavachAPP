@@ -13,7 +13,7 @@ It comes in two editions:
 
 The Admin view exists only in the laptop edition. The hub serves the console only to the laptop itself (`http://localhost:8787`); phones that open the hub get the phone edition, and admin-only actions are refused from phones.
 
-The app **starts empty**: every alert, scan, walk, visitor, statistic and audit entry comes from what people do in it. Cameras show video only when a real webcam or phone camera is connected; demo buttons simulate the parts that need hardware (gate turnstile, RFID, weight sensors).
+The app **starts empty**: there are no demo people. Students and guards create their own accounts with their **@kletech.ac.in** email, and every alert, scan, walk, visitor, statistic and audit entry comes from what people do in it. Cameras show video only when a real webcam or phone camera is connected; demo buttons simulate the parts that need hardware (gate turnstile, RFID, weight sensors).
 
 ## Set up on campus
 
@@ -38,7 +38,8 @@ Campus data is saved in the `data` folder next to `hub.mjs` (`state.json`, `conf
 
 1. Download the **kavach-debug-apk** artifact from the same Actions run, unzip it, copy `app-debug.apk` to the phone (Android 6+) and install it.
 2. Connect the phone to the **same Wi-Fi** as the laptop.
-3. In the app tap **Connect to the campus hub → Scan pairing QR** and scan the QR on the laptop's Setup page, or type the address and 6-digit code.
+3. Create an account (student or guard) with a **@kletech.ac.in** email, or log in. Turn on **fingerprint login** when asked.
+4. In **Profile → Campus hub** (guards: tap your initial at the top → Campus hub) tap **Scan pairing QR** and scan the QR on the laptop's Setup page, or type the address and 6-digit code.
 
 No app? Scan the Setup QR with the phone's camera: it opens Kavach in the browser and pairs automatically (cameras and the face check need the app, because browsers only allow cameras on secure pages).
 
@@ -54,15 +55,15 @@ Each phone gets its own token, so the laptop can **unpair** one phone without af
 
 - The **hub** (`hub/server.js`, bundled to `hub.mjs`) keeps the one shared copy of the campus state, runs the timers (alert escalation, missed-checkpoint prompts) and saves to disk.
 - Every change is a **named action** (`src/actions.js`), such as `passNext`, `acceptAlert` or `createVisitor`. A device applies it locally at once, then sends it to the hub, which runs the same code and pushes the new state to every device. A retried action never runs twice.
-- Which demo student a phone is signed in as (Priya or Aarav) stays on that phone, so two students can use Kavach at the same time. Student notifications reach only that student, and a Saathi Walk can only be driven from the phone that started it.
+- Every action carries the person signed in on that phone, so the hub knows every student and guard who has used Kavach. A guard is **on duty** from sign-in until they log out; alerts and Saathi Walks go to the guard at the nearest post (a female guard if the student asked for one), or to the security office when no guard is signed in. Student notifications reach only that student, and a Saathi Walk can only be driven from the phone that started it.
 - A camera connected on the laptop shows as **live** on guard phones ("Live on Security laptop"). Video and AI stay on the device with the camera; only alerts, anonymised alert frames and checkpoint photos are shared. When a student passes a checkpoint, the device with that checkpoint's camera adds the photo.
 
 ## Demo script (about 6 minutes)
 
 Start the laptop edition (`npm start` from source, or the start script), then open the phone edition on a phone or in a second browser window and pair it.
 
-0. **Phone → start screen.** Pick Female (pink) or Male (blue), then open the student app.
-1. **Student → My ID.** Unlock with fingerprint. The QR changes every 10 seconds. *Simulate gate scan*, then *Scan IN again* (anti-passback), then *Try screenshot QR* (rejected). The console's **Entries today** goes up.
+0. **Phones → create accounts.** One student (female students get pink, male blue) and one guard, each with a @kletech.ac.in email.
+1. **Student → My ID.** Unlock with your fingerprint (the phone's own fingerprint prompt; the password where there is none). The QR changes every 10 seconds. *Simulate gate scan*, then *Scan IN again* (anti-passback), then *Try screenshot QR* (rejected). The console's **Entries today** goes up.
 2. **Student → Saathi Walk.** *Help me get home* → *Start walk*. With a webcam on the laptop assigned to `CAM-A1`, the checkpoint A photo is a real, anonymised frame. Tap *Go missing* and let the timer run out.
 3. **Guard phone → Alerts.** The *Missed checkpoint* alert has the last photo. Accept it, turn on lights, play the speaker warning. The console shows it as accepted.
 4. **Laptop → Cameras.** Walk past the webcam, run, or stand still to trigger the AI rules. Guard phones get the alert with the anonymised frame.
@@ -76,6 +77,14 @@ Start the laptop edition (`npm start` from source, or the start script), then op
 | Student (phone) | Rotating QR ID with gate scan, Saathi Walk (checkpoint photos tagged with the camera, camera coverage per stretch, "Are you OK?", SOS, follower alert, share link, photos deleted on arrival), report a dark spot or broken camera, LabLedger, My data (what a camera sees, retention, privacy promise), campus hub pairing |
 | Guard (phone) | Alert feed linked to cameras, live map with camera coverage, Cameras tab (camera wall, viewer with PTZ, talk-down, snapshot, flag incident, unblur request, lend the phone's camera), active walks, demo triggers |
 | Admin (laptop) | Overview with live stats and the twin, **CesiumJS digital twin** and full-screen command centre, laptop webcams with on-device AI, all alerts on the map, visitor passes, lab inventory and yearly report, audit log and transparency report, **Setup** (pairing QR and code, paired phones, data export and erase) |
+
+## Accounts, fingerprint and the Android app
+
+- **Accounts** live on the phone (`src/auth.js`): only `@kletech.ac.in` emails can register, the password is stored as a salted PBKDF2-SHA256 hash (never the password), and you stay signed in until you **log out**. Several accounts can be on one phone; the login screen lists them.
+- **Fingerprint login** uses Android's own `BiometricPrompt` (`android/.../KavachNativePlugin.java`). When it is on, Kavach asks for your fingerprint when it opens, the login screen offers one-tap fingerprint login after logging out, and **My ID** opens with your fingerprint. In a browser, or on a phone with no fingerprint enrolled, the password is used instead.
+- **Back button / gesture** closes the open sheet, goes back a page or to the Home tab, and on Home moves Kavach to the background (still signed in) instead of quitting.
+- The app draws edge to edge and keeps clear of the status bar, navigation bar and keyboard.
+- An account is per phone: to use the same account on another phone, create it there too (same USN and email). **Profile → Remove account from this phone** deletes it from the phone.
 
 ## On-device intelligence
 
@@ -95,7 +104,7 @@ Each rule can be switched off and its sensitivity changed per camera (Cameras �
 
 ## Theme
 
-Dark tactical theme from the CAMIQ design: obsidian background, telemetry cyan for Guard and Admin, coral for emergencies, emerald for safe and amber for warnings. Fonts are Space Grotesk (headings), Plus Jakarta Sans (text) and JetBrains Mono (data), bundled so they work offline. **Students: pink for female (Priya), blue for male (Aarav).** Saathi Walk offers a **female guard** preference (on by default for female students), and guards see a pink or blue tag on every walk alert.
+Dark tactical theme from the CAMIQ design: obsidian background, telemetry cyan for Guard and Admin, coral for emergencies, emerald for safe and amber for warnings. Fonts are Space Grotesk (headings), Plus Jakarta Sans (text) and JetBrains Mono (data), bundled so they work offline. **Students: pink for female, blue for male**, from the gender chosen when creating the account. Saathi Walk offers a **female guard** preference (on by default for female students), and guards see a pink or blue tag on every walk alert.
 
 ## Campus layout
 
@@ -130,7 +139,9 @@ The Android app allows plain `http` to the hub on the local network (`usesCleart
 
 | Path | Contents |
 |---|---|
-| `src/phone.jsx` | Phone edition shell: start screen, Student/Guard switch, pairing |
+| `src/phone.jsx` | Phone edition shell: sign-in, the Student or Guard app for the account, Android back button, pairing |
+| `src/auth.js`, `src/login.jsx`, `src/sha256.js` | Accounts on the phone, login / register / lock screens, password hashing |
+| `src/native.js`, `src/back.js` | Fingerprint prompt and back button (Android plugin), back navigation stack |
 | `src/laptop.jsx` | Laptop edition: Admin console with sidebar, Cameras, Alerts and Setup pages |
 | `src/student.jsx`, `src/guard.jsx`, `src/admin.jsx` | The apps and admin panels |
 | `src/actions.js` | Named actions (the only way state changes), shared by the apps and the hub |

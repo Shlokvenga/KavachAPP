@@ -2,6 +2,8 @@
 // change can run on this device and, when paired, on the laptop hub that
 // keeps the one copy every phone and the admin console sync from.
 //   act('passNext', snap)  →  ACTIONS.passNext(draft, snap)
+// Each action is sent with the signed-in person (`who`); while it runs, d.me is
+// that person and they are added to d.users (and to d.guards for a guard).
 import { studentOf } from './data.js';
 import * as S from './store.js';
 
@@ -13,7 +15,9 @@ const findVisitor = (d, id) => d.visitors.find((x) => x.id === id);
 
 export const ACTIONS = {
   // student
-  gateScan: S.gateScan, setGender: S.setGender, startWalk: S.startWalk, passNext: own(S.passNext),
+  hello: () => {}, // just records who signed in (a guard goes on duty)
+  signOut: S.signOut,
+  gateScan: S.gateScan, startWalk: S.startWalk, passNext: own(S.passNext),
   goMissing: own(S.goMissing), answerOk: own(S.answerOk), sos: own(S.sos), cancelSos: own(S.cancelSos), follower: own(S.follower),
   reportDarkSpot: S.reportDarkSpot, issueItems: S.issueItems, returnItem: S.returnItem, raiseDispute: S.raiseDispute,
   walkSharing: own((d, on) => { d.walk.sharing = !!on; }),
@@ -71,8 +75,9 @@ export const ACTIONS = {
 // Actions only the laptop console may run when phones are paired to the hub.
 export const ADMIN_ONLY = new Set(['createVisitor', 'visitorIn', 'visitorOut', 'stockReport']);
 
-export function applyAction(d, name, args = []) {
+export function applyAction(d, name, args = [], who = null) {
   const fn = ACTIONS[name];
   if (!fn) throw new Error('Unknown action: ' + name);
-  return fn(d, ...args);
+  if (who) { S.upsertUser(d, who); d.me = d.users[who.id] || null; }
+  try { return fn(d, ...args); } finally { delete d.me; }
 }

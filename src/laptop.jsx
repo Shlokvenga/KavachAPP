@@ -254,7 +254,7 @@ function AlertRow({ a, now, open, onToggle, openCam }) {
   const { s } = useApp();
   const T = ALERT_TYPES[a.type];
   const P = PRI[T.pri];
-  const g = s.guards.find((x) => x.id === (a.acceptedBy || a.assigned));
+  const g = a.acceptedName ? { name: a.acceptedName } : s.guards.find((x) => x.id === (a.acceptedBy || a.assigned));
   const status = a.status === 'resolved' ? ['Closed', 'bg-emerald-100 text-emerald-700'] : a.escalated ? ['Escalated', 'bg-amber-100 text-amber-800'] : a.status === 'accepted' ? ['Accepted', 'bg-brand-100 text-brand'] : ['New', 'bg-red-600 text-white'];
   return (
     <Card className={cls('p-0', open && 'ring-2 ring-brand/50')}>
@@ -280,7 +280,7 @@ function AlertRow({ a, now, open, onToggle, openCam }) {
             <span>Raised {fmtTime(a.time)}</span>
             {a.acceptedAt && <span>Accepted {fmtTime(a.acceptedAt)}{a.dist ? ` · ${a.dist} m away` : ''}</span>}
             {a.escalatedAt && <span>Escalated {fmtTime(a.escalatedAt)}</span>}
-            {a.resolvedAt && <span>Closed {fmtTime(a.resolvedAt)} by {a.resolvedBy}</span>}
+            {a.resolvedAt && <span>Closed {fmtTime(a.resolvedAt)} by {a.resolvedName || a.resolvedBy}</span>}
           </div>
           {a.note && <p className="rounded-xl bg-slate-50 p-2.5 text-xs text-slate-600">{a.note}</p>}
           {a.cam && <Btn size="sm" v="outline" icon="video" onClick={() => openCam(a.cam)}>Open {a.cam}</Btn>}

@@ -8,6 +8,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
+        android:enableOnBackInvokedCallback="true"
         android:theme="@style/AppTheme">
 
         <activity
@@ -16,6 +17,7 @@
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
             android:exported="true">
 
             <intent-filter>
@@ -44,4 +46,7 @@
     <!-- Real cameras for on-device AI (gate face check, live CCTV analytics). Video never leaves the phone. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- Fingerprint login and ID unlock (system BiometricPrompt) -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
 </manifest>

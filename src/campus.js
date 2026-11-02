@@ -90,9 +90,9 @@ export const CHECKPOINTS = {
 };
 
 export const GUARD_POSTS = {
-  ramesh: { x: -70, y: -100 },
-  sunita: { x: -320, y: 160 },
-  imran: { x: 290, y: -15 },
+  gate: { x: -70, y: -100 },
+  girls: { x: -320, y: 160 },
+  boys: { x: 290, y: -15 },
 };
 
 // CCTV cameras. heading: degrees clockwise from north. range in metres.

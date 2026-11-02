@@ -136,7 +136,7 @@ export function CrossModule() {
       </div>
       <div className="mt-3 flex items-center justify-between rounded-xl bg-slate-50 p-2.5 text-sm">
         <span>Oscilloscope #4</span>
-        {osc.holder ? <Badge className="bg-emerald-100 text-emerald-700">Issued to {(studentById(osc.holder) || {}).name || osc.holder}</Badge> : <Badge className="bg-slate-200 text-slate-700">In lab · not issued</Badge>}
+        {osc.holder ? <Badge className="bg-emerald-100 text-emerald-700">Issued to {(studentById(s, osc.holder) || {}).name || osc.holder}</Badge> : <Badge className="bg-slate-200 text-slate-700">In lab · not issued</Badge>}
       </div>
       <Btn v="outline" size="sm" className="mt-3 w-full" icon="zap" onClick={() => act('equipmentLeaving', 'osc4')}>Simulate: Oscilloscope #4 passes lab door</Btn>
     </Card>

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import qrcode from 'qrcode-generator';
 import { CP, cls, pad, studentOf } from './data.js';
 import { useApp } from './ctx.js';
+import { BACK, useBack } from './back.js';
 
 const ICONS = {
   home: '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>',
@@ -121,10 +122,10 @@ export const Badge = ({ className, children }) => (
   <span className={cls('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold', className)}>{children}</span>
 );
 
-export function Toggle({ on, onChange, label }) {
+export function Toggle({ on, onChange, label, disabled }) {
   return (
-    <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)}
-      className={cls('relative h-7 w-12 shrink-0 rounded-full transition-colors', on ? 'bg-emerald-500' : 'bg-slate-300')}>
+    <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)}
+      className={cls('relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-40', on ? 'bg-emerald-500' : 'bg-slate-300')}>
       <span className={cls('absolute top-0.5 h-6 w-6 rounded-full bg-card shadow transition-all', on ? 'left-[22px]' : 'left-0.5')} />
     </button>
   );
@@ -149,6 +150,7 @@ export function Stepper({ value, onChange, max = 99 }) {
 // A bottom sheet on phones; a centred dialog on the laptop console.
 export function Sheet({ onClose, title, children, tall }) {
   const { desk } = useApp() || {};
+  useBack(onClose, true, BACK.sheet);
   return (
     <div className={cls('absolute inset-0 z-40 flex flex-col', desk ? 'items-center justify-center p-6' : 'justify-end')}>
       <div className="fade-in absolute inset-0 bg-ink/50" onClick={onClose} />
@@ -257,6 +259,7 @@ export function CheckpointPhoto({ snap, cam, time, className, deleted }) {
 // Full-screen "scanning" animation that walks through a list of steps, then calls onDone.
 export function ScanOverlay({ title, subtitle, steps, duration = 2400, mode = 'qr', onDone }) {
   const [t, setT] = useState(0);
+  useBack(() => {}, true, BACK.block); // a scan finishes on its own
   const done = useRef(onDone);
   done.current = onDone;
   useEffect(() => {
@@ -347,34 +350,20 @@ const TOAST_STYLE = {
   warn: ['bg-amber-600', 'alert'],
   info: ['bg-[#0a1218] ring-1 ring-brand/40', 'bell'],
 };
-const ROLE_LABEL = { student: 'Student app', guard: 'Guard app', admin: 'Admin' };
 
-// In single-phone mode, toasts for other roles show as a "push notification" you can tap to jump there.
-// Student toasts are addressed to one student (several phones can be paired).
-// Other roles' toasts only show on a stand-alone device that has that role.
+// Toasts for this app's role. Student toasts are addressed to one student
+// (several phones can be paired).
 export function Toasts({ role }) {
-  const { s, split, setRole, roles = ['student', 'guard', 'admin'], mode } = useApp();
+  const { s } = useApp();
   const me = studentOf(s).id;
   const forMe = (t) => t.role !== 'student' || !t.sid || t.sid === me;
-  const own = s.toasts.filter((t) => t.role === role && forMe(t)).slice(-2);
-  const other = split || mode === 'hub' ? [] : s.toasts.filter((t) => t.role !== role && roles.includes(t.role) && forMe(t)).slice(-1);
-  const list = [...other, ...own];
+  const list = s.toasts.filter((t) => t.role === role && forMe(t)).slice(-2);
   if (!list.length) return null;
   return (
     <div className="pointer-events-none absolute inset-x-0 top-2 z-[60] flex flex-col items-center gap-2 px-3" aria-live="polite">
       {list.map((t) => {
         const [bg, ic] = TOAST_STYLE[t.kind] || TOAST_STYLE.info;
-        const other = t.role !== role;
-        return other ? (
-          <button key={t.id} type="button" onClick={() => setRole(t.role)}
-            className="toast-in pointer-events-auto flex w-full items-center gap-3 rounded-2xl bg-card/95 p-3 text-left shadow-xl ring-1 ring-slate-200 backdrop-blur">
-            <span className={cls('grid h-9 w-9 shrink-0 place-items-center rounded-xl text-white', bg)}><Icon name={ic} className="h-4 w-4" /></span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400">{ROLE_LABEL[t.role]} · tap to open</span>
-              <span className="block truncate text-sm font-medium text-slate-800">{t.msg}</span>
-            </span>
-          </button>
-        ) : (
+        return (
           <div key={t.id} className={cls('toast-in flex w-full items-center gap-2.5 rounded-2xl px-3.5 py-3 text-sm font-medium text-white shadow-xl', bg)}>
             <Icon name={ic} className="h-5 w-5" />
             <span className="min-w-0 flex-1">{t.msg}</span>
@@ -407,6 +396,7 @@ export function BottomNav({ items, value, onChange }) {
 }
 
 export function ScreenHeader({ title, sub, right, onBack }) {
+  useBack(onBack, !!onBack, BACK.page);
   return (
     <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-ink/85 px-4 py-3 backdrop-blur">
       {onBack && (
@@ -430,14 +420,54 @@ export const SectionTitle = ({ children, right }) => (
   </div>
 );
 
-export function DemoPanel({ title = 'Demo controls', children }) {
+// Demo controls stand in for hardware (gate turnstile, weight sensor). Folded away
+// by default so they don't compete with the real screen.
+export function DemoPanel({ title = 'Demo controls', children, open = false }) {
   return (
-    <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-slate-100/60 p-3">
-      <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-        <Icon name="zap" className="h-3.5 w-3.5" />{title}
-      </div>
-      {children}
-    </div>
+    <details open={open} className="group rounded-2xl border border-dashed border-slate-300">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 [&::-webkit-details-marker]:hidden">
+        <Icon name="zap" className="h-3.5 w-3.5" /><span className="flex-1">{title}</span>
+        <Icon name="chevR" className="h-4 w-4 transition group-open:rotate-90" />
+      </summary>
+      <div className="px-3 pb-3">{children}</div>
+    </details>
+  );
+}
+
+// Information, not something to tap: plain muted text, no card.
+export function Note({ icon = 'info', children, className }) {
+  return (
+    <p className={cls('flex items-start gap-2 px-1 text-xs leading-relaxed text-slate-500', className)}>
+      {icon && <Icon name={icon} className="mt-px h-3.5 w-3.5 text-slate-400" />}<span className="min-w-0 flex-1">{children}</span>
+    </p>
+  );
+}
+
+// Something to tap: a row in a list of actions, with a chevron.
+export function ActionRow({ icon, title, sub, onClick, right, danger }) {
+  return (
+    <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-slate-100 active:bg-slate-100">
+      {icon && <span className={cls('grid h-9 w-9 shrink-0 place-items-center rounded-xl', danger ? 'bg-red-50 text-red-700' : 'bg-brand-50 text-brand')}><Icon name={icon} className="h-4 w-4" /></span>}
+      <span className="min-w-0 flex-1">
+        <span className={cls('block text-sm font-semibold', danger ? 'text-red-700' : 'text-slate-900')}>{title}</span>
+        {sub && <span className="block truncate text-xs text-slate-500">{sub}</span>}
+      </span>
+      {right || <Icon name="chevR" className="h-4 w-4 text-slate-400" />}
+    </button>
+  );
+}
+
+// A plain label/value list for facts (profile details, walk facts).
+export function Facts({ rows, className }) {
+  return (
+    <dl className={cls('divide-y divide-line', className)}>
+      {rows.filter(Boolean).map(([k, v]) => (
+        <div key={k} className="flex items-baseline justify-between gap-4 px-1 py-2.5 text-sm">
+          <dt className="shrink-0 text-slate-500">{k}</dt>
+          <dd className="min-w-0 truncate text-right text-slate-800">{v}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

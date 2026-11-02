@@ -55,7 +55,10 @@ try {
   const wrong = await phone('/api/pair', null, { method: 'POST', body: { code: code === '000000' ? '111111' : '000000', dev: 'x' } });
   check('wrong code refused', wrong.status === 401);
 
-  const pa = await phone('/api/pair', null, { method: 'POST', body: { code, dev: 'dev-a', name: 'Priya phone' } });
+  const ANU = { id: '01FE21BEC045', role: 'student', email: 'anu@kletech.ac.in', name: 'Anu Patil', first: 'Anu', gender: 'female', hostel: 'girls' };
+  const RAVI = { id: '01FE21BCS018', role: 'student', email: 'ravi@kletech.ac.in', name: 'Ravi Joshi', first: 'Ravi', gender: 'male', hostel: 'boys' };
+  const GUARD = { id: 'GTEST001', role: 'guard', email: 'meena@kletech.ac.in', name: 'Meena Desai', first: 'Meena', gender: 'female', post: 'girls' };
+  const pa = await phone('/api/pair', null, { method: 'POST', body: { code, dev: 'dev-a', name: 'Anu phone' } });
   const pb = await phone('/api/pair', null, { method: 'POST', body: { code, dev: 'dev-b', name: 'Aarav phone' } });
   const A = pa.json.token; const B = pb.json.token;
   check('two phones pair', pa.status === 200 && pb.status === 200 && A && B && A !== B);
@@ -67,24 +70,38 @@ try {
   // long poll wakes when another phone acts
   const poll = phone(`/api/state?v=${v}`, A);
   await new Promise((r) => setTimeout(r, 150));
-  const act = await phone('/api/act', B, { method: 'POST', body: { id: 'b1', name: 'gateScan', args: ['IN'], gender: 'male' } });
+  const act = await phone('/api/act', B, { method: 'POST', body: { id: 'b1', name: 'gateScan', args: ['IN'], who: RAVI } });
   const woke = await poll;
   check('long poll wakes on change', woke.status === 200 && woke.json.v > v && woke.json.state.gate.log.length === 1);
-  check('action runs as the sending student', act.json.state.gate.log[0].sid === '21BRS018');
+  check('action runs as the sending student', act.json.state.gate.log[0].sid === RAVI.id);
 
-  const again = await phone('/api/act', B, { method: 'POST', body: { id: 'b1', name: 'gateScan', args: ['IN'], gender: 'male' } });
+  const again = await phone('/api/act', B, { method: 'POST', body: { id: 'b1', name: 'gateScan', args: ['IN'], who: RAVI } });
   check('retried action is not applied twice', again.json.state.gate.log.length === 1);
 
+  // a guard signing in goes on duty; users are known to every device
+  const gIn = await phone('/api/act', B, { method: 'POST', body: { id: 'g1', name: 'hello', args: [], who: GUARD } });
+  check('guard goes on duty when signed in', gIn.json.state.guards.length === 1 && gIn.json.state.guards[0].id === GUARD.id && gIn.json.state.guards[0].post === 'Girls Hostel');
+  check('signed-in people are in users', gIn.json.state.users[RAVI.id] && gIn.json.state.users[GUARD.id] && !gIn.json.state.me);
+
   // walks belong to the student who started them
-  await phone('/api/act', A, { method: 'POST', body: { id: 'a1', name: 'startWalk', args: ['D', false, { femaleGuard: true }], gender: 'female' } });
-  const other = await phone('/api/act', B, { method: 'POST', body: { id: 'b2', name: 'passNext', args: [null], gender: 'male' } });
-  check("another student cannot move Priya's walk", other.json.state.walk.steps.filter((x) => x.status === 'passed').length === 1);
-  const own = await phone('/api/act', A, { method: 'POST', body: { id: 'a2', name: 'passNext', args: [null], gender: 'female' } });
-  check('Priya passes her next checkpoint', own.json.state.walk.steps.filter((x) => x.status === 'passed').length === 2);
+  await phone('/api/act', A, { method: 'POST', body: { id: 'a1', name: 'startWalk', args: ['D', false, { femaleGuard: true }], who: ANU } });
+  const other = await phone('/api/act', B, { method: 'POST', body: { id: 'b2', name: 'passNext', args: [null], who: RAVI } });
+  check("another student cannot move Anu's walk", other.json.state.walk.steps.filter((x) => x.status === 'passed').length === 1);
+  const own = await phone('/api/act', A, { method: 'POST', body: { id: 'a2', name: 'passNext', args: [null], who: ANU } });
+  check('the female guard on duty watches the walk', own.json.state.walk.guard === GUARD.id);
+  check('Anu passes her next checkpoint', own.json.state.walk.steps.filter((x) => x.status === 'passed').length === 2);
   const toasts = own.json.state.toasts.filter((t) => t.role === 'student');
-  check('student toasts are addressed to her', toasts.length > 0 && toasts.every((t) => t.sid === '21BRS045'));
-  const busy = await phone('/api/act', B, { method: 'POST', body: { id: 'b3', name: 'startWalk', args: ['E', false, {}], gender: 'male' } });
-  check('second walk refused while one is active', busy.json.state.walk.sid === '21BRS045');
+  check('student toasts are addressed to her', toasts.length > 0 && toasts.every((t) => t.sid === ANU.id));
+  const busy = await phone('/api/act', B, { method: 'POST', body: { id: 'b3', name: 'startWalk', args: ['E', false, {}], who: RAVI } });
+  check('second walk refused while one is active', busy.json.state.walk.sid === ANU.id);
+
+  const sosA = await phone('/api/act', A, { method: 'POST', body: { id: 'a4', name: 'sos', args: [], who: ANU } });
+  const sosId = sosA.json.state.walk.sosAlert;
+  check('SOS goes to the walk guard', sosA.json.state.alerts.find((x) => x.id === sosId).assigned === GUARD.id);
+  const acc = await phone('/api/act', B, { method: 'POST', body: { id: 'g2', name: 'acceptAlert', args: [sosId, GUARD.id], who: GUARD } });
+  check('guard accepts the SOS', acc.json.state.alerts.find((x) => x.id === sosId).acceptedName === 'Meena');
+  const gOut = await phone('/api/act', B, { method: 'POST', body: { id: 'g3', name: 'signOut', args: [], who: GUARD } });
+  check('guard goes off duty when signing out', gOut.json.state.guards.length === 0);
 
   // permissions
   const vis = await phone('/api/act', A, { method: 'POST', body: { id: 'a3', name: 'createVisitor', args: [{ name: 'Test', phone: '9999999999', purpose: 'Meeting', dest: 'Main Building', from: '10:00', to: '11:00' }] } });

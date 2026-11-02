@@ -7,20 +7,29 @@ export const HOUR = 60 * MIN;
 export const ESCALATE_MS = 2 * MIN;
 export const QR_PERIOD = 10; // seconds
 
-// The two demo students the student app can sign in as. Female uses the pink
-// theme and the Girls Hostel; male uses the blue theme and the Boys Hostel.
-export const STUDENTS = {
-  female: {
-    gender: 'female', name: 'Priya Sharma', first: 'Priya', id: '21BRS045', dept: 'Electronics & Communication', year: '3rd year',
-    phone: '+91 98450 21045', hostel: 'Girls Hostel, Room 214', home: 'D',
-  },
-  male: {
-    gender: 'male', name: 'Aarav Kulkarni', first: 'Aarav', id: '21BRS018', dept: 'Computer Science & Engineering', year: '3rd year',
-    phone: '+91 98450 21018', hostel: 'Boys Hostel, Room 108', home: 'E',
-  },
+// People are real accounts (see src/auth.js). The signed-in person on this device
+// is s.me; everyone who has used Kavach is in s.users, and guards on duty are in
+// s.guards. Female students get the pink theme, male students the blue one.
+export const EMAIL_DOMAIN = 'kletech.ac.in';
+export const HOSTELS = {
+  girls: { label: 'Girls Hostel', home: 'D' },
+  boys: { label: 'Boys Hostel', home: 'E' },
+  day: { label: 'Day scholar', home: null },
 };
-export const studentOf = (s) => STUDENTS[s.gender] || STUDENTS.female;
-export const studentById = (id) => Object.values(STUDENTS).find((x) => x.id === id) || null;
+export const POSTS = {
+  gate: { label: 'Main Gate', ...GUARD_POSTS.gate },
+  girls: { label: 'Girls Hostel', ...GUARD_POSTS.girls },
+  boys: { label: 'Boys Hostel', ...GUARD_POSTS.boys },
+};
+export const DEPTS = [
+  'Computer Science & Engineering', 'Electronics & Communication', 'Electrical & Electronics', 'Mechanical Engineering',
+  'Civil Engineering', 'Automation & Robotics', 'Biotechnology', 'Chemical Engineering', 'Architecture', 'MCA', 'MBA',
+];
+export const YEARS = ['1st year', '2nd year', '3rd year', '4th year', 'Postgraduate'];
+const NOBODY = { id: '', role: 'student', name: '', first: '', gender: 'female', dept: '', year: '', hostel: 'day', home: null, phone: '' };
+export const studentOf = (s) => s.me || NOBODY;
+export const studentById = (s, id) => (s.users && s.users[id]) || null;
+export const homeOf = (u) => (HOSTELS[u.hostel] || HOSTELS.day).home;
 export const GENDER = {
   female: { label: 'Female', theme: 'theme-female', chip: 'bg-pink-500/15 text-pink-300 ring-1 ring-pink-400/40', dot: 'bg-pink-400' },
   male: { label: 'Male', theme: 'theme-male', chip: 'bg-blue-500/15 text-blue-300 ring-1 ring-blue-400/40', dot: 'bg-blue-400' },
@@ -34,19 +43,13 @@ export const CP = Object.fromEntries(Object.entries(CHECKPOINTS).map(([id, c]) =
 
 export const cpShort = (id) => (['A', 'B', 'C', 'D', 'E', 'F', 'K'].includes(id) ? CP[id].tag : CP[id].name);
 
-export const GUARDS = [
-  { id: 'ramesh', name: 'Ramesh', post: 'Main Gate', ...GUARD_POSTS.ramesh },
-  { id: 'sunita', name: 'Sunita', post: 'Girls Hostel', female: true, ...GUARD_POSTS.sunita },
-  { id: 'imran', name: 'Imran', post: 'Boys Hostel', ...GUARD_POSTS.imran },
-];
-
 // Saathi Walk routes on the real campus (see src/campus.js). mins = walking time
-// for that stretch.
+// for that stretch; post = the guard post that watches the route.
 export const ROUTES = {
   D: {
     dest: 'Girls Hostel',
     sub: 'Via Sports Arena path and Hostel Lane',
-    guard: 'sunita',
+    post: 'girls',
     finalScan: 'hostel QR',
     steps: [
       { cp: 'A', mins: 0 },
@@ -58,7 +61,7 @@ export const ROUTES = {
   E: {
     dest: 'Boys Hostel',
     sub: 'Via Workshop Path',
-    guard: 'imran',
+    post: 'boys',
     finalScan: 'hostel QR',
     steps: [
       { cp: 'A', mins: 0 },
@@ -69,7 +72,7 @@ export const ROUTES = {
   GATE: {
     dest: 'Main Gate (PB Road)',
     sub: 'Via Main Building',
-    guard: 'ramesh',
+    post: 'gate',
     finalScan: 'gate QR',
     steps: [
       { cp: 'A', mins: 0 },
@@ -165,8 +168,8 @@ export function verifyQr(text, now = Date.now()) {
 }
 
 // ---------- initial state (empty) ----------
-// Only campus setup is here: guards on duty, the camera registry and the lab's
-// stock register. Everything else starts empty.
+// Only campus setup is here: the camera registry and the lab's stock register.
+// People, guards on duty and all activity start empty.
 export const LAB_ITEMS = [
   { id: 'res220', name: 'Resistor 220 Ω', short: 'resistor', stock: 500, min: 100, gram: 0.25, kind: 'consumable', shelf: 'E-3' },
   { id: 'ledr', name: 'LED (red)', short: 'LED', stock: 300, min: 80, gram: 0.3, kind: 'consumable', shelf: 'E-3' },
@@ -176,16 +179,16 @@ export const LAB_ITEMS = [
   { id: 'dmm7', name: 'Digital Multimeter #7', short: 'Multimeter #7', stock: 1, min: 0, kind: 'instrument', rfid: 'RF-11D7', bench: 'Bench 2', holder: null },
 ];
 
-export const STATE_VERSION = 4;
-export function makeInitial(gender = 'female') {
+export const STATE_VERSION = 5;
+export function makeInitial() {
   return {
     v: STATE_VERSION,
     seq: 1000,
-    gender,
+    users: {},
     gate: { dirs: {}, log: [] },
     walk: null,
     walksCompleted: 0,
-    guards: GUARDS.map((g) => ({ ...g })),
+    guards: [],
     alerts: [],
     inventory: LAB_ITEMS.map((i) => ({ ...i, open: i.stock })),
     issued: [],
@@ -200,6 +203,24 @@ export function makeInitial(gender = 'female') {
     darkSpots: [],
     toasts: [],
   };
+}
+
+// Saved state from version 4 had demo students and guards: keep the campus
+// activity, drop the demo people.
+export function migrate(s) {
+  if (!s || typeof s !== 'object') return null;
+  if (s.v === 4) {
+    const { gender, ...rest } = s;
+    const demo = ['21BRS045', '21BRS018'];
+    return {
+      ...rest, v: STATE_VERSION, users: {}, guards: [], walk: null,
+      gate: { dirs: Object.fromEntries(Object.entries(s.gate.dirs).filter(([k]) => !demo.includes(k))), log: s.gate.log.filter((l) => !demo.includes(l.sid)) },
+      issued: s.issued.filter((i) => !demo.includes(i.sid)),
+      disputes: s.disputes.filter((x) => !demo.includes(x.sid)),
+      inventory: s.inventory.map((i) => (demo.includes(i.holder) ? { ...i, holder: null } : i)),
+    };
+  }
+  return s.v === STATE_VERSION ? s : null;
 }
 
 // ---------- statistics, always computed from recorded activity ----------
