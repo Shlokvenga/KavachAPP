@@ -96,7 +96,7 @@ export const GUARD_POSTS = {
 };
 
 // CCTV cameras. heading: degrees clockwise from north. range in metres.
-// All analytics are behaviour-only; faces are pixelated and never searched.
+// All analytics are behaviour-only; faces are never searched.
 export const CAMERAS = [
   { id: 'CAM-G1', name: 'Main Gate · Lane 1', cp: 'GATE', x: -95, y: -100, heading: 45, fov: 70, range: 40, type: 'Gate 1:1 verify', scene: 'gate', analytics: ['Tailgating', 'Wrong way'] },
   { id: 'CAM-G2', name: 'Main Gate · Lane 2', cp: 'GATE', x: -72, y: -118, heading: 45, fov: 70, range: 40, type: 'Gate 1:1 verify', scene: 'gate', analytics: ['Tailgating', 'Crowding'] },

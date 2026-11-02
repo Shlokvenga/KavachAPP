@@ -127,7 +127,7 @@ export function walkGuard(d, r, femaleGuard) {
   return pool.find((g) => g.postId === r.post) || nearestOf(pool, CP[r.steps[r.steps.length - 1].cp]);
 }
 
-// `snap` is an anonymised frame from a real camera at the checkpoint, if one is connected.
+// `snap` is a frame from a real camera at the checkpoint, if one is connected.
 export function startWalk(d, destKey, sharing, { femaleGuard = false, snap = null } = {}) {
   const r = ROUTES[destKey];
   const st = studentOf(d);
@@ -250,6 +250,41 @@ export function sos(d) {
   vibrate([400, 100, 400]);
 }
 
+// ---------- student: SOS from anywhere (no walk needed) ----------
+export const mySos = (s) => {
+  const id = studentOf(s).id;
+  return (id && s.alerts.find((a) => a.type === 'sos' && a.status !== 'resolved' && a.student && a.student.id === id)) || null;
+};
+
+// The student says where they are (nearest checkpoint). A silent SOS asks guards
+// not to call the phone. With femaleGuard, the nearest female guard on duty gets it.
+export function sosHere(d, cp, { silent = false, femaleGuard = false } = {}) {
+  const st = studentOf(d);
+  if (!st.id || !CP[cp]) return;
+  if (mySos(d)) { toast(d, 'student', 'Your SOS is already with the guards', 'info'); return; }
+  const women = d.guards.filter((g) => g.female);
+  const her = femaleGuard && women.length ? nearestOf(women, CP[cp]) : null;
+  const a = createAlert(d, {
+    type: 'sos',
+    cp,
+    detail: `SOS from ${st.name} near ${CP[cp].name}.${st.phone ? ` Phone ${st.phone}.` : ''}${silent ? ' Silent SOS: do not call, go there.' : ''}${femaleGuard ? ' Female guard requested.' : ''}`,
+    assign: her ? her.id : null,
+    student: { id: st.id, name: st.name, gender: st.gender },
+  });
+  a.silent = !!silent;
+  const g = guardById(d, a.assigned);
+  toast(d, 'student', `SOS sent. ${guardLabel(g)} notified.`, 'alert');
+  if (!silent) vibrate([400, 100, 400]);
+}
+
+export function cancelMySos(d) {
+  const a = mySos(d);
+  if (!a) return;
+  a.status = 'resolved'; a.resolvedAt = Date.now(); a.resolvedBy = 'student'; a.note = 'Cancelled by student: "I am safe now".';
+  toast(d, 'guard', `${a.id} cancelled by student (safe)`, 'success');
+  toast(d, 'student', 'SOS cancelled. Stay safe!', 'info');
+}
+
 export function cancelSos(d) {
   const w = d.walk;
   const a = findAlert(d, w.sosAlert);
@@ -294,14 +329,14 @@ export function acceptAlert(d, id, guardId) {
   g.x = cp.x - 10;
   g.y = cp.y - 10;
   toast(d, 'guard', `Navigating to ${cp.name} · ${a.dist} m · ~${Math.max(1, Math.ceil(a.dist / 80))} min`, 'info');
-  if (a.walk) toast(d, 'student', `Guard ${g.name} accepted and is on the way`, 'success', a.student && a.student.id);
+  if (a.student) toast(d, 'student', `Guard ${g.name} accepted and is on the way`, 'success', a.student.id);
 }
 
 export function toggleLights(d, id) {
   const a = findAlert(d, id);
   a.lights = !a.lights;
   toast(d, 'guard', `Area lights ${a.lights ? 'ON' : 'OFF'} · ${CP[a.cp].name}`, a.lights ? 'success' : 'info');
-  if (a.walk && a.lights) toast(d, 'student', 'Lights near you were turned on', 'info', a.student && a.student.id);
+  if (a.student && a.lights) toast(d, 'student', 'Lights near you were turned on', 'info', a.student.id);
 }
 
 export function playSpeaker(d, id) {
@@ -328,7 +363,7 @@ export function resolveAlert(d, id, guardId) {
   a.resolvedName = g.name;
   toast(d, 'guard', `${a.id} resolved by ${g.name}`, 'success');
   toast(d, 'admin', `${a.id} resolved by ${g.name}`, 'success');
-  if (a.walk) toast(d, 'student', `Guard ${g.name} marked your alert resolved`, 'success', a.student && a.student.id);
+  if (a.student) toast(d, 'student', `Guard ${g.name} marked your alert resolved`, 'success', a.student.id);
 }
 
 export function skipTime(d, ms = 2 * MIN) {
@@ -368,8 +403,8 @@ export function camPtz(d, camId, change) {
 }
 
 export function snapshot(d, camId, who) {
-  audit(d, who, `Saved snapshot from ${camId}`, 'Evidence for incident log (faces stay blurred)');
-  toast(d, 'guard', `Snapshot saved from ${camId}. Faces stay blurred.`, 'success');
+  audit(d, who, `Saved snapshot from ${camId}`, 'Evidence for incident log');
+  toast(d, 'guard', `Snapshot saved from ${camId}`, 'success');
 }
 
 export function talkDown(d, camId) {
@@ -380,12 +415,6 @@ export function flagIncident(d, camId, guardId) {
   const cam = camById(camId);
   const g = guardById(d, guardId);
   createAlert(d, { type: 'flagged', cp: cam.cp, cam: camId, assign: guardId, detail: `Flagged by Guard ${g.name} while watching ${camId} (${cam.name}).` });
-}
-
-export function requestUnblur(d, camId, who, reason) {
-  audit(d, who, `Requested unblur · ${camId}`, `${reason}. Sent to student committee for review`);
-  toast(d, 'guard', 'Unblur request sent to the student committee', 'info');
-  toast(d, 'admin', `Unblur request for ${camId} awaiting committee review`, 'warn');
 }
 
 export function reportDarkSpot(d, cp) {
@@ -460,7 +489,7 @@ export function raiseDispute(d, label, reason) {
 
 // ---------- on-device AI ----------
 // A behaviour event from a real camera becomes a normal alert, with the
-// anonymised snapshot, the confidence and the plain-language reason attached.
+// snapshot, the confidence and the plain-language reason attached.
 export function aiEvent(d, camId, ev, snap) {
   const cam = camById(camId);
   const type = RULES[ev.rule].alert;

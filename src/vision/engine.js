@@ -3,7 +3,7 @@
 // anti-spoof and liveness). No frame, face or embedding ever leaves the device.
 //
 // Two pipelines, on purpose:
-//  - SURVEILLANCE (every campus camera): people/objects + face boxes for blurring.
+//  - SURVEILLANCE (every campus camera): people/objects + face boxes.
 //    It never computes a face embedding, so face search is impossible by design.
 //  - GATE (checkpoint only): face embedding + anti-spoof + liveness for a 1:1 match
 //    against the one student who presented their QR pass.
@@ -42,7 +42,7 @@ const BASE = {
 
 export const MODELS = [
   { file: 'centernet', name: 'CenterNet', task: 'People and object detection (COCO)', pipeline: 'Surveillance' },
-  { file: 'blazeface', name: 'BlazeFace', task: 'Face boxes, used only to blur faces', pipeline: 'Surveillance + Gate' },
+  { file: 'blazeface', name: 'BlazeFace', task: 'Face boxes', pipeline: 'Surveillance + Gate' },
   { file: 'faceres', name: 'FaceRes', task: '1:1 face match at the gate (never 1:N)', pipeline: 'Gate' },
   { file: 'antispoof', name: 'Anti-spoof', task: 'Rejects photos and screens held up to the camera', pipeline: 'Gate' },
   { file: 'liveness', name: 'Liveness', task: 'Checks a live face is present', pipeline: 'Gate' },

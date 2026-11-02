@@ -117,6 +117,7 @@ function Phone({ framed, theme, role, children }) {
   const inner = (
     <div data-phone={role || 'signin'} className={cls('flex h-full w-full flex-col overflow-hidden bg-slate-50', theme, !framed && 'pt-[env(safe-area-inset-top)]')}>
       {framed && <StatusBar />}
+      {role && <AppHeader role={role} />}
       <div className="relative flex min-h-0 flex-1 flex-col">
         {children}
         {role && <Toasts role={role} />}
@@ -135,6 +136,21 @@ function Phone({ framed, theme, role, children }) {
       <div className="h-full w-full overflow-hidden rounded-[38px]">{inner}</div>
       <div className="pointer-events-none absolute left-1/2 top-[18px] z-[80] h-[24px] w-[92px] -translate-x-1/2 rounded-full bg-ink" />
     </div>
+  );
+}
+
+// CAMIQ command header: mark, product and role badge, campus, hub status.
+function AppHeader({ role }) {
+  const { openPair } = useApp();
+  return (
+    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-white/10 bg-[#060c11]/90 px-4 backdrop-blur-md">
+      <Logo className="h-8 w-8 shrink-0" />
+      <div className="min-w-0 flex-1 leading-tight">
+        <div className="truncate text-sm font-extrabold tracking-widest text-slate-900">KAVACH <span className="font-medium text-brand">{role === 'guard' ? 'RESPONSE' : 'SAFE'}</span></div>
+        <div className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-slate-500"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />KLE Tech · Hubballi</div>
+      </div>
+      <SyncChip onClick={openPair} />
+    </header>
   );
 }
 

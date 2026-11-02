@@ -1,7 +1,7 @@
 // CCTV: camera wall tiles, feeds and the full camera viewer.
 // A camera only shows video when a real camera (webcam / phone camera) is
-// connected to it on this device; otherwise it says so. Live video is always
-// anonymised (see vision/live.js).
+// connected to it on this device or, through the hub, on another paired device
+// (see vision/live.js and RemoteView).
 import { useEffect, useRef, useState } from 'react';
 import { ALERT_TYPES, CP, camById, cls, fmtTime } from './data.js';
 import { guardById } from './store.js';
@@ -18,7 +18,7 @@ export const CAM_STATUS = {
 };
 
 // Another paired device (e.g. the security laptop) that has this camera connected.
-// Its video stays on that device; only alerts and anonymised snapshots are shared.
+// Its live view comes through the hub (RemoteView).
 export function remoteHost(s, camId) {
   if (isLive(camId)) return null;
   const devs = (s.net && s.net.devices) || [];
@@ -33,7 +33,27 @@ export function camStatus(s, camId) {
   return isLive(camId) || remoteHost(s, camId) ? 'online' : 'none';
 }
 
-export function CameraFeed({ camId, className, showMeta = true }) {
+// Video from a camera connected on another device, through the hub: a live MJPEG
+// stream in the camera viewer, a picture refreshed every 2 s on the camera wall.
+function RemoteView({ camId, stream }) {
+  const { pairing } = useApp();
+  const [tick, setTick] = useState(0);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (stream) return undefined;
+    const id = setInterval(() => setTick((t) => t + 1), 2000);
+    return () => clearInterval(id);
+  }, [stream]);
+  if (!pairing) return null;
+  const q = `cam=${encodeURIComponent(camId)}${pairing.key ? `&key=${encodeURIComponent(pairing.key)}` : ''}`;
+  const src = stream ? `${pairing.url}/api/mjpeg?${q}` : `${pairing.url}/api/snap?${q}&t=${tick}`;
+  return (
+    <img src={src} alt={`Live view of ${camId}`} onLoad={() => failed && setFailed(false)} onError={() => setFailed(true)}
+      className={cls('absolute inset-0 h-full w-full object-cover', failed && 'opacity-0')} />
+  );
+}
+
+export function CameraFeed({ camId, className, showMeta = true, stream = false }) {
   const { s } = useApp();
   useVision();
   const st = camStatus(s, camId);
@@ -50,16 +70,14 @@ export function CameraFeed({ camId, className, showMeta = true }) {
   }
   const host = st === 'online' && remoteHost(s, camId);
   if (host) {
-    const last = s.alerts.find((a) => a.cam === camId && a.snap);
     return (
       <div className={cls('relative grid aspect-video w-full place-items-center overflow-hidden rounded-xl bg-black text-center', className)}>
-        {last && <img src={last.snap} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />}
-        <div className="relative px-2">
+        <div className="px-2">
           <Icon name="video" className="mx-auto h-5 w-5 text-brand" />
-          <div className="mt-1 font-mono text-[10px] font-bold tracking-widest text-brand">LIVE ON {host.name.toUpperCase()}</div>
-          {showMeta && <div className="mt-0.5 text-[9px] text-slate-400">AI runs there. Video stays on that device.{last ? ' Last alert frame shown.' : ''}</div>}
+          <div className="mt-1 font-mono text-[10px] font-bold tracking-widest text-brand">CONNECTING TO {host.name.toUpperCase()}</div>
         </div>
-        {showMeta && <div className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[9px] font-bold text-brand"><span className="h-1.5 w-1.5 rounded-full bg-red-500 blink" />{camId}</div>}
+        <RemoteView camId={camId} stream={stream} />
+        {showMeta && <div className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 font-mono text-[9px] font-bold text-brand"><span className="h-1.5 w-1.5 rounded-full bg-red-500 blink" />{camId} · LIVE · {host.name}</div>}
       </div>
     );
   }
@@ -69,7 +87,7 @@ export function CameraFeed({ camId, className, showMeta = true }) {
       <div className="px-2">
         <Icon name={msg[0]} className={cls('mx-auto h-5 w-5', msg[2])} />
         <div className={cls('mt-1 font-mono text-[10px] font-bold tracking-widest', msg[2])}>{msg[1]}</div>
-        {st === 'none' && showMeta && <div className="mt-0.5 text-[9px] text-slate-500">Connect a camera on the laptop or in Guard → Cameras</div>}
+        {st === 'none' && showMeta && <div className="mt-0.5 text-[9px] text-slate-500">{s.net ? 'Connect a camera on the laptop or a phone' : 'Pair with the laptop hub to see its cameras'}</div>}
       </div>
       {showMeta && <div className="absolute left-1.5 top-1.5 rounded bg-black/55 px-1.5 py-0.5 font-mono text-[9px] text-white">{camId}</div>}
     </div>
@@ -95,11 +113,8 @@ export function CamTile({ camId, onOpen, highlight }) {
   );
 }
 
-const UNBLUR_REASONS = ['Police complaint', 'Theft investigation', 'Student safety incident', 'Ragging complaint'];
-
 export function CameraViewer({ camId, onClose, who, guardId }) {
   const { s, act } = useApp();
-  const [unblur, setUnblur] = useState(false);
   const logged = useRef(false);
   const cam = camById(camId);
   const st = { ...s.cams[camId], status: camStatus(s, camId) };
@@ -124,9 +139,9 @@ export function CameraViewer({ camId, onClose, who, guardId }) {
         <Badge className={CAM_STATUS[st.status].badge}>{CAM_STATUS[st.status].label}</Badge>
       </div>
       <div className="no-scrollbar flex-1 overflow-y-auto px-4 pb-6">
-        <CameraFeed camId={camId} />
+        <CameraFeed camId={camId} stream />
         <div className="mt-2 flex items-center justify-between text-[11px] text-white/60">
-          <span className="flex items-center gap-1"><Icon name="eye" className="h-3.5 w-3.5" />Faces blurred · behaviour AI only</span>
+          <span className="flex items-center gap-1"><Icon name="eye" className="h-3.5 w-3.5" />Behaviour AI on the camera's device</span>
           <span>This view is logged in the audit</span>
         </div>
 
@@ -152,21 +167,8 @@ export function CameraViewer({ camId, onClose, who, guardId }) {
         <div className="mt-3 grid grid-cols-2 gap-2">
           <Btn v="dark" size="sm" icon="speaker" onClick={() => act('talkDown', camId)}>Talk-down speaker</Btn>
           <Btn v="dark" size="sm" icon="camera" disabled={!live} onClick={() => act('snapshot', camId, who)}>Snapshot</Btn>
-          {g && <Btn v="danger" size="sm" icon="flag" onClick={() => { act('flagIncident', camId, guardId); onClose(); }}>Flag incident</Btn>}
-          <Btn v="dark" size="sm" icon="eye" className={g ? '' : 'col-span-2'} onClick={() => setUnblur(!unblur)}>Request unblur</Btn>
+          {g && <Btn v="danger" size="sm" icon="flag" className="col-span-2" onClick={() => { act('flagIncident', camId, guardId); onClose(); }}>Flag incident</Btn>}
         </div>
-        {unblur && (
-          <div className="fade-up mt-3 rounded-2xl bg-white/5 p-3 ring-1 ring-white/10">
-            <div className="text-sm font-semibold">Why do you need to see faces?</div>
-            <p className="text-xs text-white/60">The student committee reviews every request. Nothing is unblurred until they approve.</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {UNBLUR_REASONS.map((r) => (
-                <button key={r} type="button" onClick={() => { act('requestUnblur', camId, who, r); setUnblur(false); }}
-                  className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium hover:bg-white/20">{r}</button>
-              ))}
-            </div>
-          </div>
-        )}
 
         <div className="mt-4 text-xs font-bold uppercase tracking-wider text-white/50">Events at this camera</div>
         <div className="mt-2 space-y-1.5">

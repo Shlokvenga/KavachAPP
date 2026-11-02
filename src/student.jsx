@@ -1,5 +1,5 @@
 // Student app: Home, My ID, Saathi Walk, Lab (LabLedger), Profile.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   CAMERAS, CP, DISPUTE_REASONS, HOSTELS, MIN, QR_PERIOD, ROUTES, camsAt, cls, cpShort, fmtDay, fmtTime, homeOf, myLog, presence, qrCode, studentOf,
 } from './data.js';
@@ -8,14 +8,14 @@ import { CameraFeed, camStatus } from './cctv.jsx';
 import { FaceEnrolPage, GateCheckSheet, useVision } from './vision/ui.jsx';
 import { snapshotAt } from './vision/live.js';
 import { aiSupported } from './vision/engine.js';
-import { guardById, guardLabel, lastPassed, myWalk, nextStep, walkGuard } from './store.js';
+import { guardById, guardLabel, lastPassed, mySos, myWalk, nextStep, walkGuard } from './store.js';
 import { useApp } from './ctx.js';
 import { BACK, useBack } from './back.js';
 import { checkPassword } from './auth.js';
 import { fingerprint } from './native.js';
 import { FingerprintSetting, bioHelp, useBiometric } from './login.jsx';
 import {
-  ActionRow, Avatar, Badge, BottomNav, Btn, Card, CheckpointPhoto, DemoPanel, Facts, Icon, LiveDot, Note, QR, ResultSheet, Ring,
+  ActionRow, Avatar, Badge, BottomNav, Btn, Card, CheckpointPhoto, DemoPanel, Eyebrow, Facts, Icon, LiveDot, Note, QR, ResultSheet, Ring,
   ScanOverlay, ScreenHeader, SectionTitle, Sheet, Stepper, Toggle, useFastNow,
 } from './ui.jsx';
 
@@ -69,6 +69,96 @@ export default function StudentApp() {
   );
 }
 
+// ---------------- SOS (always on Home) ----------------
+// Hold the orb for 1 s to send, so a pocket tap does not raise an alarm. During a
+// Saathi Walk it uses the walk (last checkpoint, walk guard); otherwise the student
+// picks where they are.
+const SOS_CP_KEY = 'kavach-sos-place';
+const HOLD_MS = 1000;
+function SosCard({ go }) {
+  const { s, act } = useApp();
+  const me = studentOf(s);
+  const w = myWalk(s);
+  const walking = w && w.phase === 'active';
+  const open = mySos(s);
+  const [place, setPlace] = useState(() => { try { return localStorage.getItem(SOS_CP_KEY) || 'A'; } catch (e) { return 'A'; } });
+  const [silent, setSilent] = useState(false);
+  const [pct, setPct] = useState(0);
+  const timer = useRef(null);
+  const send = () => {
+    if (walking) { act('sos'); go('walk'); } else act('sosHere', place, { silent, femaleGuard: me.gender === 'female' });
+  };
+  const start = (e) => {
+    e.preventDefault();
+    const t0 = performance.now();
+    const step = () => {
+      const p = Math.min(100, ((performance.now() - t0) / HOLD_MS) * 100);
+      setPct(p);
+      if (p >= 100) { timer.current = null; setPct(0); try { navigator.vibrate && navigator.vibrate(60); } catch (x) { /* ignore */ } send(); } else timer.current = requestAnimationFrame(step);
+    };
+    timer.current = requestAnimationFrame(step);
+  };
+  const stop = () => { if (timer.current) cancelAnimationFrame(timer.current); timer.current = null; setPct(0); };
+  const pick = (v) => { setPlace(v); try { localStorage.setItem(SOS_CP_KEY, v); } catch (e) { /* ignore */ } };
+
+  if (open) {
+    const g = guardById(s, open.acceptedBy || open.assigned);
+    return (
+      <div className="fade-up rounded-2xl border border-red-500/50 bg-red-500/15 p-4">
+        <Eyebrow className="text-red-700">SOS active · {open.id}</Eyebrow>
+        <div className="mt-1 font-bold text-slate-900">{open.status === 'accepted' ? `${open.acceptedName || g.name} is on the way` : open.escalated ? 'Escalated to the Security Head' : `Waiting for ${g.id ? g.name : 'a guard'} to accept`}</div>
+        <div className="mt-0.5 text-xs text-slate-500">Near {CP[open.cp].name} · sent {fmtTime(open.time)}</div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <a href="tel:112" className="flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-red-500/40 bg-red-500/15 font-mono text-xs font-semibold text-red-700"><Icon name="phone" className="h-3.5 w-3.5" />Call 112</a>
+          <Btn v="success" size="sm" icon="check" onClick={() => act('cancelMySos')}>I'm safe</Btn>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="glass-card rounded-2xl p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <Eyebrow>{me.gender === 'female' ? "Women's campus safety" : 'Student emergency'}</Eyebrow>
+          <h2 className="font-display text-base font-bold text-slate-900">Emergency SOS</h2>
+        </div>
+        {walking
+          ? <span className="font-mono text-[10px] uppercase text-slate-500">On Saathi Walk</span>
+          : (
+            <select aria-label="Where are you" value={place} onChange={(e) => pick(e.target.value)}
+              className="max-w-[48%] rounded-lg border border-white/15 bg-black/40 px-2 py-1.5 font-mono text-[11px] text-slate-800">
+              {Object.values(CP).map((c) => <option key={c.id} value={c.id} className="bg-[#060c11]">{c.name}</option>)}
+            </select>
+          )}
+      </div>
+      <div className="flex justify-center py-4">
+        <div className="relative grid place-items-center">
+          <span className="orb-ring absolute h-36 w-36 rounded-full bg-red-500/25" />
+          <button type="button" aria-label="Hold for one second to send SOS"
+            onPointerDown={start} onPointerUp={stop} onPointerLeave={stop} onPointerCancel={stop} onContextMenu={(e) => e.preventDefault()}
+            className="sos-orb relative flex h-32 w-32 touch-none select-none flex-col items-center justify-center rounded-full text-white transition active:scale-95">
+            {pct > 0 && (
+              <svg className="absolute inset-0 -rotate-90" viewBox="0 0 100 100" aria-hidden="true">
+                <circle cx="50" cy="50" r="47" fill="none" stroke="white" strokeWidth="4" strokeDasharray={`${(pct / 100) * 295} 295`} strokeLinecap="round" />
+              </svg>
+            )}
+            <Icon name="siren" className="h-7 w-7" />
+            <span className="mt-1 text-base font-bold tracking-wider">SOS</span>
+            <span className="font-mono text-[10px] opacity-90">{pct > 0 ? `${Math.round(pct)}%` : 'HOLD 1 SEC'}</span>
+          </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" onClick={() => setSilent((v) => !v)} aria-pressed={silent}
+          className={cls('flex min-h-9 items-center justify-center gap-1.5 rounded-lg border font-mono text-xs transition', silent ? 'border-amber-400 bg-amber-500/20 text-amber-700' : 'border-white/15 bg-black/30 text-slate-500')}>
+          <Icon name="vibrate" className="h-3.5 w-3.5" />{silent ? 'Silent ON' : 'Silent SOS'}
+        </button>
+        <a href="tel:112" className="flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-red-500/40 bg-red-500/15 font-mono text-xs font-semibold text-red-700"><Icon name="phone" className="h-3.5 w-3.5" />Call 112</a>
+      </div>
+    </div>
+  );
+}
+
 // ---------------- Home ----------------
 // Things to tap sit on raised surfaces; information is plain text on the background.
 function Home({ go }) {
@@ -96,7 +186,9 @@ function Home({ go }) {
         {lastGate && <span className="truncate">· last scan {fmtTime(lastGate.time)}, {lastGate.place}</span>}
       </p>
 
-      <div className="mt-6 space-y-3 px-4">
+      <div className="mt-5 space-y-3 px-4">
+        <SosCard go={go} />
+
         {w && w.phase === 'active' && (
           <button type="button" onClick={() => go('walk')} className="fade-up flex w-full items-center gap-3 rounded-2xl bg-accent p-4 text-left text-ink shadow-lg">
             <Icon name="walk" className="h-6 w-6" />
@@ -125,7 +217,7 @@ function Home({ go }) {
 
       <div className="mt-8 px-5">
         <div className="flex items-center justify-between">
-          <h2 className="text-[12px] font-semibold uppercase tracking-[.14em] text-slate-500">Recent activity</h2>
+          <h2 className="font-mono text-[10px] font-semibold uppercase tracking-[.14em] text-slate-500">Recent activity</h2>
           {log.length > 3 && <button type="button" className="text-xs font-semibold text-brand" onClick={() => go('id')}>See all</button>}
         </div>
         {log.length === 0
@@ -284,7 +376,7 @@ function IdLock({ onOpen }) {
         ) : (
           <form onSubmit={submit} className="mt-8 w-full max-w-[300px] space-y-3 text-left">
             <input type="password" autoComplete="current-password" aria-label="Password" placeholder="Your Kavach password" value={pw} onChange={(e) => setPw(e.target.value)}
-              className="h-12 w-full rounded-xl bg-slate-100 px-3.5 text-[15px] text-slate-900 ring-1 ring-line placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand" />
+              className="h-12 w-full rounded-lg border border-white/15 bg-black/40 px-3.5 text-[15px] text-slate-900 placeholder:text-slate-400 focus:border-brand focus:outline-none" />
             <Btn type="submit" className="w-full" icon="lock" disabled={busy || !pw}>{busy ? 'Checking…' : 'Open my ID'}</Btn>
             {bio.available
               ? <button type="button" onClick={() => { setMode(null); setErr(''); }} className="block w-full pt-2 text-center text-sm font-semibold text-brand">Use fingerprint</button>
@@ -524,7 +616,7 @@ function WalkActive() {
           <CheckpointPhoto snap={last.snap} cam={camsAt(last.cp)[0]} time={last.time} className="h-16 w-24 shrink-0" />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 text-sm font-bold text-slate-900"><Icon name={last.snap ? 'camera' : 'check'} className="h-4 w-4 text-brand" />{last.snap ? `Photo captured at checkpoint ${cpShort(last.cp)}` : `Checked in at checkpoint ${cpShort(last.cp)}`}</div>
-            <div className="text-xs text-slate-500">{fmtTime(last.time, true)} · {last.snap ? 'anonymised, deleted when you arrive' : 'no camera connected here, so no photo'}</div>
+            <div className="text-xs text-slate-500">{fmtTime(last.time, true)} · {last.snap ? 'deleted when you arrive' : 'no camera connected here, so no photo'}</div>
           </div>
         </Card>
 
@@ -870,7 +962,7 @@ function MyData({ onBack }) {
     ['Entry and exit log', `Headcount in emergencies · ${myLog(s).length} records now`, '30 days'],
     ['Saathi Walk photos', `Only during a walk · ${walkPhotos} stored now`, 'Deleted on arrival (max 12 h)'],
     ['Lab issue records', `${s.issued.filter((i) => i.sid === me.id).length} records`, 'Until returned + 1 semester'],
-    ['Camera video between checkpoints', 'Anonymous, faces blurred, no names', '7 days'],
+    ['Camera video between checkpoints', 'Behaviour AI only, no face search, no names', '7 days'],
   ];
   const promise = [
     ['No face database search.', 'Your face is only matched 1:1 with your own ID.'],
@@ -900,7 +992,7 @@ function MyData({ onBack }) {
           <SectionTitle>What a campus camera sees</SectionTitle>
           <Card className="p-3">
             <CameraFeed camId="CAM-B1" />
-            <p className="mt-2 text-sm text-slate-600">Faces are blurred. People get a temporary number like <b>#12 walking</b>, never a name. {CAMERAS.length} cameras, all shown below.</p>
+            <p className="mt-2 text-sm text-slate-600">The AI gives people a temporary number like <b>#12 walking</b>, never a name. {CAMERAS.length} cameras, all shown below.</p>
             <div className="mt-2 overflow-hidden rounded-xl ring-1 ring-slate-200"><CampusMap showCams cams={s.cams} showGuards={false} /></div>
           </Card>
         </div>

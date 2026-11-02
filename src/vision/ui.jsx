@@ -1,4 +1,4 @@
-// UI for the on-device AI: live anonymised views, camera binding, explainable
+// UI for the on-device AI: live views, camera binding, explainable
 // alert blocks, face enrolment and the real 1:1 gate check.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { CAMERAS } from '../campus.js';
@@ -12,7 +12,7 @@ import { RULES } from './rules.js';
 
 export const useVision = () => useSyncExternalStore(subscribeVision, visionVersion);
 
-// Mirrors a live camera's anonymised output into this component's own canvas.
+// Mirrors a live camera's output into this component's own canvas.
 export function LiveView({ camId, className }) {
   const ref = useRef(null);
   useEffect(() => {
@@ -82,7 +82,7 @@ export function CamConnect() {
       <div className="flex items-start justify-between gap-2">
         <div>
           <div className="font-display text-sm font-bold uppercase tracking-wider text-slate-900">Real cameras · on-device AI</div>
-          <p className="text-xs text-slate-500">Connect webcams or this phone's camera. Video is analysed on this device and never uploaded.</p>
+          <p className="text-xs text-slate-500">Connect webcams or this phone's camera. The AI runs on this device; paired guard phones and the laptop can watch the live view.</p>
         </div>
         <Icon name="cpu" className="h-5 w-5 text-brand" />
       </div>
@@ -168,8 +168,7 @@ export function AiExplain({ a }) {
         <span className="ml-auto font-mono text-[10px] text-slate-500">{a.ai.model}</span>
       </div>
       <p className="mt-1.5 text-xs text-slate-700"><b>Why:</b> {a.ai.explain}</p>
-      {a.snap && <img src={a.snap} alt="Anonymised snapshot from the camera" className="mt-2 w-full rounded-lg ring-1 ring-line" />}
-      <p className="mt-1 text-[10px] text-slate-500">Snapshot is anonymised (faces and heads pixelated) before it is saved.</p>
+      {a.snap && <img src={a.snap} alt="Snapshot from the camera" className="mt-2 w-full rounded-lg ring-1 ring-line" />}
     </div>
   );
 }

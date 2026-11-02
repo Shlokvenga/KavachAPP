@@ -11,7 +11,7 @@ import { tick, toast } from './store.js';
 import { listAccounts } from './auth.js';
 import { HubClient, clearPairing, loadPairing, savePairing } from './sync.js';
 import { subscribeVision } from './vision/engine.js';
-import { configureLive, live, snapshotAt } from './vision/live.js';
+import { configureLive, live, shareFrames, snapshotAt } from './vision/live.js';
 import { deleteTemplate, loadTemplate, verify } from './vision/face.js';
 
 const STORE_KEY = 'kavach-state';
@@ -72,6 +72,8 @@ export function useKavach({ edition, role, deviceName, me = null }) {
     return () => { off(); c.stop(); client.current = null; };
   }, [pairing, commit, deviceName, edition]);
   useEffect(() => { if (client.current) client.current.beat(); }, [role, me]);
+  // live video from cameras on this device goes to the hub for the other devices
+  useEffect(() => (pairing ? shareFrames(pairing) : undefined), [pairing]);
 
   // ---- run an action ----
   // actAs: for the rare action on behalf of an account that is not open (logging

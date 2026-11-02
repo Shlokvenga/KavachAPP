@@ -248,7 +248,6 @@ export function transparency(s) {
     walks: s.walksCompleted + (s.walk && s.walk.phase === 'active' ? 1 : 0),
     followers: s.alerts.filter((a) => a.type === 'follower').length,
     faceSearches: 0, // there is no face search in Kavach
-    unblurs: s.audit.filter((a) => a.action.startsWith('Requested unblur')).length,
     views: s.audit.filter((a) => a.cat === 'footage').length,
   };
 }

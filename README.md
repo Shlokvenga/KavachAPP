@@ -56,7 +56,7 @@ Each phone gets its own token, so the laptop can **unpair** one phone without af
 - The **hub** (`hub/server.js`, bundled to `hub.mjs`) keeps the one shared copy of the campus state, runs the timers (alert escalation, missed-checkpoint prompts) and saves to disk.
 - Every change is a **named action** (`src/actions.js`), such as `passNext`, `acceptAlert` or `createVisitor`. A device applies it locally at once, then sends it to the hub, which runs the same code and pushes the new state to every device. A retried action never runs twice.
 - Every action carries the person signed in on that phone, so the hub knows every student and guard who has used Kavach. A guard is **on duty** from sign-in until they log out; alerts and Saathi Walks go to the guard at the nearest post (a female guard if the student asked for one), or to the security office when no guard is signed in. Student notifications reach only that student, and a Saathi Walk can only be driven from the phone that started it.
-- A camera connected on the laptop shows as **live** on guard phones ("Live on Security laptop"). Video and AI stay on the device with the camera; only alerts, anonymised alert frames and checkpoint photos are shared. When a student passes a checkpoint, the device with that checkpoint's camera adds the photo.
+- **Cameras are shared through the hub.** The device with a camera (the laptop's webcams, or a phone lending its camera) runs the AI and sends its live view to the hub: about 6 frames a second while someone watches that camera, one every 2 s otherwise. Guard phones and the console show it on the camera wall and play it live in the camera viewer. Frames are kept in memory only, never saved. Without a hub, a phone only sees its own cameras. When a student passes a checkpoint, the device with that checkpoint's camera adds the photo.
 
 ## Demo script (about 6 minutes)
 
@@ -64,18 +64,18 @@ Start the laptop edition (`npm start` from source, or the start script), then op
 
 0. **Phones → create accounts.** One student (female students get pink, male blue) and one guard, each with a @kletech.ac.in email.
 1. **Student → My ID.** Unlock with your fingerprint (the phone's own fingerprint prompt; the password where there is none). The QR changes every 10 seconds. *Simulate gate scan*, then *Scan IN again* (anti-passback), then *Try screenshot QR* (rejected). The console's **Entries today** goes up.
-2. **Student → Saathi Walk.** *Help me get home* → *Start walk*. With a webcam on the laptop assigned to `CAM-A1`, the checkpoint A photo is a real, anonymised frame. Tap *Go missing* and let the timer run out.
+2. **Student → Saathi Walk.** *Help me get home* → *Start walk*. With a webcam on the laptop assigned to `CAM-A1`, the checkpoint A photo is a real,  frame. Tap *Go missing* and let the timer run out.
 3. **Guard phone → Alerts.** The *Missed checkpoint* alert has the last photo. Accept it, turn on lights, play the speaker warning. The console shows it as accepted.
-4. **Laptop → Cameras.** Walk past the webcam, run, or stand still to trigger the AI rules. Guard phones get the alert with the anonymised frame.
+4. **Laptop → Cameras.** Walk past the webcam, run, or stand still to trigger the AI rules. Guard phones get the alert with the  frame.
 5. **Laptop → Digital twin / Command centre.** The 3D campus with camera cones, live alert beams, guards, the walk route and the heatmap.
-6. **Laptop → Visitors, Lab stock, Audit.** Visitor passes (guards are told), the yearly stock report, and the audit log of every camera view, snapshot and unblur request.
+6. **Laptop → Visitors, Lab stock, Audit.** Visitor passes (guards are told), the yearly stock report, and the audit log of every camera view, snapshot and lookup.
 
 ## Features
 
 | Where | Features |
 |---|---|
-| Student (phone) | Rotating QR ID with gate scan, Saathi Walk (checkpoint photos tagged with the camera, camera coverage per stretch, "Are you OK?", SOS, follower alert, share link, photos deleted on arrival), report a dark spot or broken camera, LabLedger, My data (what a camera sees, retention, privacy promise), campus hub pairing |
-| Guard (phone) | Alert feed linked to cameras, live map with camera coverage, Cameras tab (camera wall, viewer with PTZ, talk-down, snapshot, flag incident, unblur request, lend the phone's camera), active walks, demo triggers |
+| Student (phone) | **Emergency SOS on Home** (hold 1 s, pick where you are, Silent SOS, Call 112, "I'm safe" to cancel; female students' SOS goes to a female guard when one is on duty), Rotating QR ID with gate scan, Saathi Walk (checkpoint photos tagged with the camera, camera coverage per stretch, "Are you OK?", SOS, follower alert, share link, photos deleted on arrival), report a dark spot or broken camera, LabLedger, My data (what a camera sees, retention, privacy promise), campus hub pairing |
+| Guard (phone) | Alert feed linked to cameras, live map with camera coverage, Cameras tab (camera wall, viewer with PTZ, talk-down, snapshot, flag incident, lend the phone's camera), active walks, demo triggers |
 | Admin (laptop) | Overview with live stats and the twin, **CesiumJS digital twin** and full-screen command centre, laptop webcams with on-device AI, all alerts on the map, visitor passes, lab inventory and yearly report, audit log and transparency report, **Setup** (pairing QR and code, paired phones, data export and erase) |
 
 ## Accounts, fingerprint and the Android app
@@ -92,7 +92,7 @@ All AI runs on the phone or laptop that has the camera, with bundled models ([Hu
 
 | What | How it works |
 |---|---|
-| Privacy in the pixels | Until the AI is ready the whole view is pixelated. After that, every face box **and** the head area of every person is pixelated in each frame, so a missed face does not leak. Alert snapshots come from this anonymised view. |
+| Live view | The camera's picture with the AI overlay: tracked people and objects with short numbers like `#12 walking`, rule lines and the camera's mode. Alert snapshots come from this view. |
 | No face search, by design | Campus cameras never compute a face embedding. Only a gate does, to compare **1:1** with the one student whose pass was shown. |
 | Behaviour rules | An anonymous tracker (people get short numbers like `#12`) feeds explainable rules: **following, running, loitering, fall, crowding, unattended bag, perimeter line crossing, tailgating** (more people crossing the gate line than QR scans), **asset exit** and **camera tamper** (image statistics only). Each alert says why, with the measured values and the threshold. |
 | Coverage to compute | Cameras near an open alert switch from WATCH (model runs only when the picture changes) to INVESTIGATE (several frames per second). |
@@ -104,7 +104,7 @@ Each rule can be switched off and its sensitivity changed per camera (Cameras �
 
 ## Theme
 
-Dark tactical theme from the CAMIQ design: obsidian background, telemetry cyan for Guard and Admin, coral for emergencies, emerald for safe and amber for warnings. Fonts are Space Grotesk (headings), Plus Jakarta Sans (text) and JetBrains Mono (data), bundled so they work offline. **Students: pink for female, blue for male**, from the gender chosen when creating the account. Saathi Walk offers a **female guard** preference (on by default for female students), and guards see a pink or blue tag on every walk alert.
+The **CAMIQ** design: obsidian background with a faint cyan glow, glass cards with thin edges, telemetry cyan for guards, admin and male students, **rose pink for female students** (with a warm card tint), coral for emergencies, emerald for safe and amber for warnings. A command header (`KAVACH SAFE` / `KAVACH RESPONSE`), small mono labels above bold titles, and the glowing SOS orb. Fonts are Inter (text), Sora (headings) and IBM Plex Mono (labels, buttons and data), bundled so they work offline. Saathi Walk offers a **female guard** preference (on by default for female students), and guards see a pink or blue tag on every walk alert.
 
 ## Campus layout
 
@@ -152,7 +152,7 @@ The Android app allows plain `http` to the hub on the local network (`usesCleart
 | `src/campus.js` | Campus model: OSM boundary and buildings, checkpoints, guard posts, cameras |
 | `src/data.js` | Constants, students, routes, inventory, stats helpers |
 | `src/cctv.jsx` | Camera feeds, camera wall tiles, camera viewer |
-| `src/vision/` | On-device AI: models, live cameras and anonymised rendering, tracker, rules, gate face check, and their UI |
+| `src/vision/` | On-device AI: models, live cameras and  rendering, tracker, rules, gate face check, and their UI |
 | `src/twin.js`, `src/twinview.jsx` | CesiumJS digital twin (laptop only, loaded on demand) and its React wrapper |
 | `test/` | `npm test` |
 | `www/` | Built phone edition (what the Android app loads) |

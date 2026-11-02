@@ -109,8 +109,9 @@ function isLocal(req) {
   return !o || hosts.some((h) => o === `http://${h}`);
 }
 const ipOf = (req) => String(req.socket.remoteAddress || '').replace('::ffff:', '');
-function deviceFor(req) {
-  const tok = req.headers['x-kavach-key'];
+function deviceFor(req, url) {
+  // <img> requests (camera streams) cannot send headers, so they pass the token in the URL
+  const tok = req.headers['x-kavach-key'] || (url && url.searchParams.get('key'));
   if (!tok) return null;
   return Object.entries(config.devices).find(([, x]) => x.token === tok) || null;
 }
@@ -162,6 +163,28 @@ function lanUrls() {
   return out.sort((a, b) => rank(a) - rank(b));
 }
 
+// ---------- live camera video ----------
+// The device that has a camera sends its live view here as JPEG frames; guard
+// phones and the console watch it as an MJPEG stream (an <img> can play that).
+// Frames are kept in memory only, never saved.
+const frames = {}; // camId -> { buf, at, dev }
+const viewers = {}; // camId -> Set of responses
+const BOUNDARY = 'kavachframe';
+function readRaw(req, limit = 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    let n = 0; const chunks = [];
+    req.on('data', (c) => { n += c.length; if (n > limit) { reject(Object.assign(new Error('Frame too large'), { code: 413 })); req.destroy(); } else chunks.push(c); });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+function pushFrame(res, buf) {
+  res.write(`--${BOUNDARY}\r\nContent-Type: image/jpeg\r\nContent-Length: ${buf.length}\r\n\r\n`);
+  res.write(buf);
+  res.write('\r\n');
+}
+const validCam = (c) => /^CAM-[A-Z0-9]{1,4}$/.test(String(c || ''));
+
 const waiters = [];
 const applied = []; // recent action ids, so a retried action never runs twice
 
@@ -187,7 +210,7 @@ async function api(req, res, url) {
   }
 
   // everything below needs this laptop or a paired device
-  const devEntry = deviceFor(req);
+  const devEntry = deviceFor(req, url);
   if (!local && !devEntry) return send(res, 401, { error: 'This device is not paired with the hub' });
   const devId = devEntry ? devEntry[0] : 'console';
 
@@ -227,6 +250,35 @@ async function api(req, res, url) {
     if (b.id) { applied.push(b.id); if (applied.length > 500) applied.shift(); }
     bump();
     return send(res, 200, snapshotJson());
+  }
+
+  if (p === '/api/frame' && req.method === 'POST') {
+    const cam = url.searchParams.get('cam');
+    if (!validCam(cam)) return send(res, 400, { error: 'Unknown camera' });
+    const buf = await readRaw(req);
+    if (buf.length < 4 || buf[0] !== 0xff || buf[1] !== 0xd8) return send(res, 400, { error: 'Not a JPEG frame' });
+    frames[cam] = { buf, at: Date.now(), dev: devId };
+    for (const r of viewers[cam] || []) pushFrame(r, buf);
+    return send(res, 200, { watchers: (viewers[cam] || new Set()).size });
+  }
+
+  if (p === '/api/mjpeg') {
+    const cam = url.searchParams.get('cam');
+    if (!validCam(cam)) return send(res, 400, { error: 'Unknown camera' });
+    res.writeHead(200, { 'content-type': `multipart/x-mixed-replace; boundary=${BOUNDARY}`, 'cache-control': 'no-store', connection: 'keep-alive' });
+    const set = (viewers[cam] = viewers[cam] || new Set());
+    set.add(res);
+    const f = frames[cam];
+    if (f && Date.now() - f.at < 10000) pushFrame(res, f.buf);
+    req.on('close', () => set.delete(res));
+    return undefined;
+  }
+
+  if (p === '/api/snap') {
+    const f = frames[url.searchParams.get('cam')];
+    if (!f || Date.now() - f.at > 15000) return send(res, 404, { error: 'No recent frame' });
+    res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'no-store', 'content-length': f.buf.length });
+    return res.end(f.buf);
   }
 
   if (p === '/api/presence' && req.method === 'POST') {

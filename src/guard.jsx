@@ -4,7 +4,6 @@ import { ALERT_TYPES, CP, ESCALATE_MS, PRI, ROUTES, cls, cpShort, distM, fmtTime
 import { guardById, guardLabel, lastPassed, nextStep } from './store.js';
 import { useApp } from './ctx.js';
 import { BACK, useBack } from './back.js';
-import { SyncChip } from './pair.jsx';
 import { FingerprintSetting } from './login.jsx';
 import CampusMap from './map.jsx';
 import { CAMERAS } from './campus.js';
@@ -15,7 +14,7 @@ import { ActionRow, Avatar, Badge, BottomNav, Btn, Card, CheckpointPhoto, DemoPa
 const byPriority = (a, b) => PRI[ALERT_TYPES[a.type].pri].rank - PRI[ALERT_TYPES[b.type].pri].rank || b.time - a.time;
 
 export default function GuardApp() {
-  const { s, user, openPair } = useApp();
+  const { s, user } = useApp();
   const [tab, setTab] = useState('alerts');
   const [cam, setCam] = useState(null);
   const [account, setAccount] = useState(false);
@@ -27,13 +26,15 @@ export default function GuardApp() {
 
   return (
     <>
-      <div className="flex shrink-0 items-center gap-3 border-b border-line bg-[#060c11] px-4 py-3 text-white">
-        <button type="button" onClick={() => setAccount(true)} aria-label="Account" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand/15 font-display text-lg font-bold text-brand ring-1 ring-brand/40">{user.first[0]}</button>
-        <div className="min-w-0 flex-1">
-          <div className="truncate font-semibold">{user.first} · on duty</div>
-          <div className="truncate text-xs text-white/60">{g.id ? g.post : 'Signing in…'}</div>
+      <div className="shrink-0 px-4 pt-3">
+        <div className="glass-card flex items-center gap-3 rounded-2xl px-4 py-3">
+          <Icon name="shield" className="h-5 w-5 text-brand" />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-bold text-slate-900">{user.name}</div>
+            <div className="truncate font-mono text-[10px] uppercase text-slate-500">{g.id ? g.post : 'Signing in…'} · {open.length} active · {CAMERAS.filter((c) => camStatus(s, c.id) === 'online').length} cams online</div>
+          </div>
+          <button type="button" onClick={() => setAccount(true)} className="shrink-0 rounded-lg border border-emerald-500/40 bg-emerald-500/20 px-3 py-1.5 font-mono text-xs font-semibold text-emerald-700">● ON DUTY</button>
         </div>
-        <SyncChip onClick={openPair} />
       </div>
 
       <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto" key={tab}>
@@ -136,7 +137,7 @@ export function AlertCard({ a, me, compact, openCam }) {
         {!compact && !a.ai && a.photo && (
           <button type="button" className="mt-3 block w-full text-left" onClick={() => a.photo.snap && logView('Viewed Saathi Walk last-seen photo')}>
             <CheckpointPhoto snap={a.photo.snap} cam={a.photo.cam} time={a.photo.time} className="aspect-video w-full" />
-            <div className="mt-1 text-[11px] font-medium text-slate-500">Last seen · {cpShort(a.photo.cp)}, {fmtTime(a.photo.time)}{a.photo.snap ? ' · anonymised' : ''}</div>
+            <div className="mt-1 text-[11px] font-medium text-slate-500">Last seen · {cpShort(a.photo.cp)}, {fmtTime(a.photo.time)}{a.photo.snap ? ' · photo' : ''}</div>
           </button>
         )}
 
@@ -264,7 +265,7 @@ function CamerasTab({ openCam }) {
       <div className="grid grid-cols-2 gap-2.5">
         {list.map((c) => <CamTile key={c.id} camId={c.id} onOpen={openCam} highlight={alertCams.has(c.id)} />)}
       </div>
-      <Note icon="eye">Feeds show behaviour only. Faces are blurred, and every view is logged with your name.</Note>
+      <Note icon="eye">Every camera view is logged with your name.</Note>
     </div>
   );
 }

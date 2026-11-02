@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
-// Dark "tactical HUD" theme (from the CAMIQ design): obsidian background, telemetry
-// cyan for primary actions (pink / blue in the student app by gender), coral for emergencies, emerald for safe, amber for warnings.
+// CAMIQ theme: obsidian background, glass cards, telemetry cyan for primary actions
+// (rose pink for female students), coral for emergencies, emerald for safe, amber for
+// warnings. Inter text, Sora headings, IBM Plex Mono labels. Sharper corners than before.
 // The neutral scale is inverted (slate-50 is darkest, slate-900 is lightest) and the
 // light status tints (red-50 … red-200) become translucent glows, so the same class
 // names read correctly on a dark UI.
@@ -26,9 +27,9 @@ module.exports = {
     extend: {
       colors: {
         ink: '#05090d',
-        card: '#0a1218',
+        card: 'rgb(var(--card) / <alpha-value>)',
         raise: '#0e1a21',
-        line: 'rgba(112, 161, 177, 0.24)',
+        line: 'rgb(var(--line) / 0.24)',
         // brand follows the active theme: cyan for Guard/Admin, pink (female) or blue (male) for the student app
         brand: { DEFAULT: 'rgb(var(--brand) / <alpha-value>)', light: 'rgb(var(--brand-light) / <alpha-value>)', dark: 'rgb(var(--brand-dark) / <alpha-value>)', 50: 'rgb(var(--brand) / 0.07)', 100: 'rgb(var(--brand) / 0.14)' },
         accent: { DEFAULT: 'rgb(var(--brand) / <alpha-value>)', light: 'rgb(var(--brand) / 0.2)', dark: 'rgb(var(--brand-light) / <alpha-value>)' },
@@ -46,10 +47,11 @@ module.exports = {
         blue: onDark(colors.sky),
       },
       fontFamily: {
-        sans: ['Plus Jakarta Sans Variable', 'Plus Jakarta Sans', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        display: ['Space Grotesk Variable', 'Space Grotesk', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono Variable', 'JetBrains Mono', 'ui-monospace', 'monospace'],
+        sans: ['Inter Variable', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        display: ['Sora Variable', 'Sora', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono: ['IBM Plex Mono', 'ui-monospace', 'monospace'],
       },
+      borderRadius: { xl: '0.5rem', '2xl': '0.75rem', '3xl': '0.875rem' },
     },
   },
   plugins: [],

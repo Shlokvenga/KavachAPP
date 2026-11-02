@@ -19,6 +19,7 @@ export const ACTIONS = {
   signOut: S.signOut,
   gateScan: S.gateScan, startWalk: S.startWalk, passNext: own(S.passNext),
   goMissing: own(S.goMissing), answerOk: own(S.answerOk), sos: own(S.sos), cancelSos: own(S.cancelSos), follower: own(S.follower),
+  sosHere: S.sosHere, cancelMySos: S.cancelMySos,
   reportDarkSpot: S.reportDarkSpot, issueItems: S.issueItems, returnItem: S.returnItem, raiseDispute: S.raiseDispute,
   walkSharing: own((d, on) => { d.walk.sharing = !!on; }),
   skipMissingTimer: own((d) => { if (d.walk.missing) d.walk.missing.until = Date.now(); }),
@@ -40,7 +41,7 @@ export const ACTIONS = {
 
   // cameras
   viewFeed: S.viewFeed, camPtz: S.camPtz, snapshot: S.snapshot, talkDown: S.talkDown,
-  flagIncident: S.flagIncident, requestUnblur: S.requestUnblur,
+  flagIncident: S.flagIncident,
   aiEvent: S.aiEvent, gateQr: S.gateQr,
   // a checkpoint photo filled in later by the device that has the camera there
   attachSnap: (d, walkId, cp, snap) => {

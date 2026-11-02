@@ -6,7 +6,7 @@ import { ALERT_TYPES, CP, cls } from './data.js';
 
 const KIND = { academic: '#16303b', admin: '#1f4352', hostel: '#1d3446', amenity: '#172b33', research: '#12352c', lab: '#1b3f4c' };
 const CAM_COL = { online: '#00e5ff', none: '#4b6370', offline: '#64748b', tampered: '#f59e0b' };
-const font = { fontFamily: "'Space Grotesk Variable', 'Space Grotesk', system-ui, sans-serif" };
+const font = { fontFamily: "'Sora Variable', 'Sora', system-ui, sans-serif" };
 
 const pts = (line) => line.map(([x, y]) => { const p = toMap(x, y); return `${p.x.toFixed(1)},${p.y.toFixed(1)}`; }).join(' ');
 const BOUNDARY_PTS = pts(BOUNDARY);

@@ -26,12 +26,12 @@ const BIO_HELP = {
 export const bioHelp = (b) => BIO_HELP[b.reason] || '';
 
 // ---------- form bits ----------
-const inputCls = 'h-12 w-full rounded-xl bg-slate-100 px-3.5 text-[15px] text-slate-900 ring-1 ring-line placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand';
+const inputCls = 'h-12 w-full rounded-lg border border-white/15 bg-black/40 px-3.5 text-[15px] text-slate-900 placeholder:text-slate-400 focus:border-brand focus:outline-none';
 
 function Field({ label, error, hint, children }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[13px] font-medium text-slate-600">{label}</span>
+      <span className="mb-1.5 block font-mono text-[10px] font-semibold uppercase tracking-[.12em] text-slate-500">{label}</span>
       {children}
       {(error || hint) && <span className={cls('mt-1 block text-xs', error ? 'text-red-700' : 'text-slate-500')}>{error || hint}</span>}
     </label>
@@ -43,8 +43,8 @@ function Choice({ value, onChange, options, label }) {
     <div className="flex gap-1.5" role="radiogroup" aria-label={label}>
       {options.map(([k, l]) => (
         <button key={k} type="button" role="radio" aria-checked={value === k} onClick={() => onChange(k)}
-          className={cls('h-11 flex-1 rounded-xl px-2 text-sm font-semibold ring-1 transition',
-            value === k ? 'bg-brand text-ink ring-brand' : 'bg-slate-100 text-slate-600 ring-line')}>{l}</button>
+          className={cls('h-11 flex-1 rounded-lg border px-2 font-mono text-xs font-semibold transition',
+            value === k ? 'border-brand bg-brand text-ink' : 'border-white/15 bg-black/30 text-slate-600')}>{l}</button>
       ))}
     </div>
   );
@@ -61,8 +61,8 @@ function Shell({ children, onBack, title }) {
       ) : (
         <div className="flex flex-col items-center px-6 pb-2 pt-12 text-center">
           <Logo className="h-14 w-14" />
-          <div className="mt-3 font-display text-2xl font-bold uppercase tracking-[.1em] text-slate-900">Kavach</div>
-          <div className="mt-1 text-xs text-slate-500">Campus safety · KLE Technological University</div>
+          <div className="mt-3 text-2xl font-extrabold tracking-[.2em] text-slate-900">KAVACH</div>
+          <div className="mt-1 flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-slate-500"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />KLE Tech · Hubballi</div>
         </div>
       )}
       <div className="mx-auto w-full max-w-[420px] flex-1 px-5 pb-10">{children}</div>

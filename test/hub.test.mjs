@@ -102,6 +102,11 @@ try {
   check('guard accepts the SOS', acc.json.state.alerts.find((x) => x.id === sosId).acceptedName === 'Meena');
   const gOut = await phone('/api/act', B, { method: 'POST', body: { id: 'g3', name: 'signOut', args: [], who: GUARD } });
   check('guard goes off duty when signing out', gOut.json.state.guards.length === 0);
+  const sos2 = await phone('/api/act', B, { method: 'POST', body: { id: 'b5', name: 'sosHere', args: ['E', { silent: true }], who: RAVI } });
+  const rs = sos2.json.state.alerts.find((x) => x.type === 'sos' && x.student && x.student.id === RAVI.id);
+  check('SOS without a walk reaches the guards', rs && rs.cp === 'E' && rs.silent && rs.status === 'new');
+  const can = await phone('/api/act', B, { method: 'POST', body: { id: 'b6', name: 'cancelMySos', args: [], who: RAVI } });
+  check('student cancels their own SOS', can.json.state.alerts.find((x) => x.id === rs.id).status === 'resolved');
 
   // permissions
   const vis = await phone('/api/act', A, { method: 'POST', body: { id: 'a3', name: 'createVisitor', args: [{ name: 'Test', phone: '9999999999', purpose: 'Meeting', dest: 'Main Building', from: '10:00', to: '11:00' }] } });
@@ -116,6 +121,26 @@ try {
   st = await phone('/api/state?v=0', A);
   const devB = st.json.state.net.devices.find((x) => x.id === 'dev-b');
   check('camera presence is shared', devB && devB.online && devB.live.includes('CAM-A1') && devB.role === 'guard');
+
+  // live video: a phone's camera frames reach other devices through the hub
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 0xff, 0xd9]);
+  const postFrame = (key) => new Promise((resolve, reject) => {
+    const r = http.request({ host: '127.0.0.1', port: PORT, path: '/api/frame?cam=CAM-A1', method: 'POST', headers: { host: 'phone.test', 'x-kavach-key': key, 'content-type': 'image/jpeg', 'content-length': jpeg.length } }, (res) => {
+      let t = ''; res.on('data', (c) => { t += c; }); res.on('end', () => resolve({ status: res.statusCode, json: JSON.parse(t || '{}') }));
+    });
+    r.on('error', reject); r.end(jpeg);
+  });
+  const watch = () => new Promise((resolve) => {
+    const r = http.request({ host: '127.0.0.1', port: PORT, path: `/api/mjpeg?cam=CAM-A1&key=${encodeURIComponent(A)}`, headers: { host: 'phone.test' } }, (res) => {
+      let got = Buffer.alloc(0);
+      res.on('data', (c) => { got = Buffer.concat([got, c]); if (got.includes(Buffer.from([0xff, 0xd9]))) { r.destroy(); resolve({ type: res.headers['content-type'], got }); } });
+    });
+    r.end();
+  });
+  check('phone sends a camera frame', (await postFrame(B)).status === 200);
+  const streamed = await watch();
+  check('another phone watches it as MJPEG', /multipart\/x-mixed-replace/.test(streamed.type) && streamed.got.includes(jpeg));
+  check('stream needs a paired phone', (await phone('/api/snap?cam=CAM-A1', null)).status === 401);
 
   // unpairing one phone ends its sync at once, the other keeps going
   v = st.json.v;

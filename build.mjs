@@ -28,14 +28,16 @@ const common = { bundle: true, minify: true, write: false, format: 'iife', targe
 const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
 
 function fontFaces() {
-  const face = (family, file, style) => {
+  // CAMIQ type: Inter for text, Sora for headings, IBM Plex Mono for data and labels
+  const face = (family, file, weight = '100 900') => {
     const b64 = readFileSync(r('node_modules', file)).toString('base64');
-    return `@font-face{font-family:'${family}';font-style:${style};font-display:swap;font-weight:100 900;src:url(data:font/woff2;base64,${b64}) format('woff2');}`;
+    return `@font-face{font-family:'${family}';font-style:normal;font-display:swap;font-weight:${weight};src:url(data:font/woff2;base64,${b64}) format('woff2');}`;
   };
+  const plex = (w) => face('IBM Plex Mono', `@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-${w}-normal.woff2`, w);
   return [
-    face('Plus Jakarta Sans Variable', '@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-latin-wght-normal.woff2', 'normal'),
-    face('Space Grotesk Variable', '@fontsource-variable/space-grotesk/files/space-grotesk-latin-wght-normal.woff2', 'normal'),
-    face('JetBrains Mono Variable', '@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2', 'normal'),
+    face('Inter Variable', '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2'),
+    face('Sora Variable', '@fontsource-variable/sora/files/sora-latin-wght-normal.woff2'),
+    plex(400), plex(500), plex(600), plex(700),
   ].join('');
 }
 

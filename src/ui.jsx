@@ -81,20 +81,26 @@ export function Icon({ name, className = 'h-5 w-5', sw = 2 }) {
   );
 }
 
-// Kavach product mark: telemetry-cyan shield on an obsidian tile.
+// Kavach mark in the CAMIQ style: a shield in a thin cyan ring.
 export function Logo({ className = 'h-8 w-8' }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <rect x=".5" y=".5" width="23" height="23" rx="6" fill="#060c11" style={{ stroke: 'rgb(var(--brand) / .45)' }} />
-      <path d="M12 19.5s6-3 6-7.5V7l-6-2.2L6 7v5c0 4.5 6 7.5 6 7.5z" strokeWidth="1.5" strokeLinejoin="round" style={{ fill: 'rgb(var(--brand) / .1)', stroke: 'rgb(var(--brand))' }} />
-      <path d="m9.2 11.9 2 2 3.7-3.9" stroke="#10B981" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="11.4" strokeWidth="1" style={{ fill: 'rgb(var(--brand) / .1)', stroke: 'rgb(var(--brand) / .6)' }} />
+      <path d="M12 18s5-2.5 5-6.3V8l-5-1.8L7 8v3.7C7 15.5 12 18 12 18z" strokeWidth="1.4" strokeLinejoin="round" fill="none" style={{ stroke: 'rgb(var(--brand))' }} />
+      <circle cx="12" cy="11.6" r="1.6" style={{ fill: 'rgb(var(--brand))' }} />
     </svg>
   );
 }
 
-export const Card = ({ className = '', children, ...p }) => (
-  <div className={cls('rounded-2xl p-4 shadow-[0_12px_36px_rgba(0,0,0,.28)] ring-1', !/(^|\s)bg-(?!gradient)/.test(className) && 'bg-card',
-    !/(^|\s)ring-(?!\d|inset)/.test(className) && 'ring-line', className)} {...p}>{children}</div>
+// CAMIQ glass card. A bg-* or ring-* class in className replaces the default surface.
+export const Card = ({ className = '', children, ...p }) => {
+  const custom = /(^|\s)bg-(?!gradient)/.test(className) || /(^|\s)ring-(?!\d|inset)/.test(className);
+  return <div className={cls('rounded-2xl p-4', custom ? 'shadow-[0_12px_36px_rgba(0,0,0,.28)] ring-1' : 'glass-card', className)} {...p}>{children}</div>;
+};
+
+// CAMIQ section label: small mono caps in the accent colour, above a title.
+export const Eyebrow = ({ children, className }) => (
+  <div className={cls('font-mono text-[10px] font-semibold uppercase tracking-[.14em] text-brand', className)}>{children}</div>
 );
 
 const BTN = {
@@ -102,16 +108,16 @@ const BTN = {
   accent: 'bg-accent text-ink hover:brightness-110 active:brightness-95 shadow-[0_0_18px_-6px_rgb(var(--brand)/0.7)]',
   danger: 'bg-red-600 text-white hover:bg-red-500 active:bg-red-700 shadow-sm',
   success: 'bg-emerald-600 text-white hover:bg-emerald-500 active:bg-emerald-700 shadow-sm',
-  outline: 'bg-card text-brand ring-1 ring-inset ring-line hover:bg-raise active:bg-raise',
+  outline: 'border border-white/15 bg-black/30 text-slate-800 hover:bg-white/10 active:bg-white/10',
   soft: 'bg-brand-50 text-brand hover:bg-brand-100 active:bg-brand-100',
   ghost: 'text-brand hover:bg-slate-100',
   dark: 'bg-white/10 text-white ring-1 ring-inset ring-white/20 hover:bg-white/20',
 };
 export function Btn({ v = 'primary', size = 'md', icon, className, children, disabled, ...p }) {
-  const sz = { sm: 'min-h-9 py-1.5 px-3 text-[13px] rounded-xl gap-1.5', md: 'min-h-12 py-2 px-4 text-[15px] rounded-2xl gap-2', lg: 'min-h-14 py-2 px-5 text-base rounded-2xl gap-2' }[size];
+  const sz = { sm: 'min-h-9 py-1.5 px-3 text-xs rounded-lg gap-1.5', md: 'min-h-12 py-2 px-4 text-[13px] rounded-lg gap-2', lg: 'min-h-14 py-2 px-5 text-sm rounded-xl gap-2' }[size];
   return (
     <button type="button" disabled={disabled}
-      className={cls('inline-flex items-center justify-center text-center leading-tight font-semibold transition active:scale-[.98] disabled:opacity-40 disabled:pointer-events-none', sz, BTN[v], className)} {...p}>
+      className={cls('inline-flex items-center justify-center text-center font-mono leading-tight font-semibold tracking-wide transition active:scale-[.98] disabled:opacity-40 disabled:pointer-events-none', sz, BTN[v], className)} {...p}>
       {icon && <Icon name={icon} className={size === 'sm' ? 'h-4 w-4' : 'h-5 w-5'} />}
       {children}
     </button>
@@ -154,7 +160,7 @@ export function Sheet({ onClose, title, children, tall }) {
   return (
     <div className={cls('absolute inset-0 z-40 flex flex-col', desk ? 'items-center justify-center p-6' : 'justify-end')}>
       <div className="fade-in absolute inset-0 bg-ink/50" onClick={onClose} />
-      <div className={cls('sheet relative flex flex-col bg-card shadow-2xl', desk ? 'w-full max-w-lg rounded-[28px] ring-1 ring-line' : 'rounded-t-[28px]', tall ? 'max-h-[92%]' : 'max-h-[85%]')}>
+      <div className={cls('sheet relative flex flex-col bg-card shadow-2xl', desk ? 'w-full max-w-lg rounded-2xl ring-1 ring-line' : 'rounded-t-2xl', tall ? 'max-h-[92%]' : 'max-h-[85%]')}>
         <div className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-slate-300" />
         {title && (
           <div className="flex shrink-0 items-center justify-between px-5 pb-1 pt-3">
@@ -234,7 +240,7 @@ export function Avatar({ size = 48, className, gender = 'female' }) {
   );
 }
 
-// A checkpoint photo: the anonymised frame from a real connected camera, or an
+// A checkpoint photo: the frame from a real connected camera, or an
 // honest placeholder when no camera was connected at that checkpoint.
 export function CheckpointPhoto({ snap, cam, time, className, deleted }) {
   const ts = time ? new Date(time) : null;
@@ -242,7 +248,7 @@ export function CheckpointPhoto({ snap, cam, time, className, deleted }) {
   return (
     <div className={cls('relative overflow-hidden rounded-xl bg-ink ring-1 ring-line', className)}>
       {snap && !deleted
-        ? <img src={snap} alt="Anonymised checkpoint photo" className="h-full w-full object-cover" />
+        ? <img src={snap} alt="Checkpoint photo" className="h-full w-full object-cover" />
         : (
           <div className="grid h-full w-full place-items-center p-1 text-center">
             <div>
@@ -376,13 +382,13 @@ export function Toasts({ role }) {
 
 export function BottomNav({ items, value, onChange }) {
   return (
-    <nav className="relative z-20 flex shrink-0 border-t border-line bg-[#060c11]/95 px-1.5 pb-[max(6px,env(safe-area-inset-bottom))] pt-1 backdrop-blur">
+    <nav className="relative z-20 flex shrink-0 border-t border-white/10 bg-[#060c11]/90 px-1.5 pb-[max(6px,env(safe-area-inset-bottom))] pt-1 backdrop-blur-md">
       {items.map((it) => {
         const on = it.id === value;
         return (
           <button key={it.id} type="button" onClick={() => onChange(it.id)} aria-current={on ? 'page' : undefined}
-            className={cls('flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[11px] transition', on ? 'font-semibold text-brand' : 'text-slate-500 hover:text-slate-700')}>
-            <span className={cls('relative grid h-8 w-12 place-items-center rounded-full transition', on && 'bg-brand-100 ring-1 ring-brand/30')}>
+            className={cls('flex flex-1 flex-col items-center gap-0.5 rounded-lg py-1.5 font-mono text-[10px] uppercase tracking-wider transition', on ? 'font-semibold text-brand' : 'text-slate-500 hover:text-slate-700')}>
+            <span className={cls('relative grid h-8 w-12 place-items-center rounded-lg transition', on && 'bg-brand/15 ring-1 ring-brand/40')}>
               <Icon name={it.icon} className="h-5 w-5" sw={on ? 2.3 : 2} />
               {it.badge > 0 && <span className="absolute -right-0.5 -top-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white ring-2 ring-brand/40">{it.badge}</span>}
               {it.dot && <span className="absolute right-1 top-0.5 h-2.5 w-2.5 rounded-full bg-accent ring-2 ring-brand/40 blink" />}
@@ -395,18 +401,19 @@ export function BottomNav({ items, value, onChange }) {
   );
 }
 
+// CAMIQ page title: mono eyebrow, bold title.
 export function ScreenHeader({ title, sub, right, onBack }) {
   useBack(onBack, !!onBack, BACK.page);
   return (
-    <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-ink/85 px-4 py-3 backdrop-blur">
+    <div className="flex items-center gap-3 px-4 pb-1 pt-4">
       {onBack && (
-        <button type="button" aria-label="Back" onClick={onBack} className="grid h-9 w-9 place-items-center rounded-full bg-card text-slate-700 shadow-sm ring-1 ring-slate-200">
+        <button type="button" aria-label="Back" onClick={onBack} className="grid h-9 w-9 place-items-center rounded-lg border border-white/15 bg-black/30 text-slate-700">
           <Icon name="chevL" className="h-5 w-5" />
         </button>
       )}
       <div className="min-w-0 flex-1">
-        <h1 className="truncate font-display text-[20px] font-bold uppercase tracking-[.06em] text-slate-900">{title}</h1>
-        {sub && <p className="truncate text-xs text-slate-500">{sub}</p>}
+        {sub && <Eyebrow className="truncate">{sub}</Eyebrow>}
+        <h1 className="truncate font-display text-lg font-bold text-slate-900">{title}</h1>
       </div>
       {right}
     </div>
@@ -415,7 +422,7 @@ export function ScreenHeader({ title, sub, right, onBack }) {
 
 export const SectionTitle = ({ children, right }) => (
   <div className="mb-2 mt-1 flex items-center justify-between px-1">
-    <h2 className="text-[12px] font-semibold uppercase tracking-[.14em] text-slate-500">{children}</h2>
+    <h2 className="font-mono text-[10px] font-semibold uppercase tracking-[.14em] text-slate-500">{children}</h2>
     {right}
   </div>
 );

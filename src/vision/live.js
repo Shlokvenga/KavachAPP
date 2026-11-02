@@ -1,11 +1,8 @@
 // Real cameras: binds a webcam / phone camera to a campus camera slot (e.g. CAM-B1),
-// runs the on-device AI on it and renders an anonymised view.
-//
-// Privacy by construction:
-//  - until the AI is ready the whole picture is pixelated;
-//  - afterwards every face box AND the head area of every person is pixelated
-//    in each rendered frame, so a missed face detection does not leak a face;
-//  - snapshots attached to alerts are taken from this anonymised view.
+// runs the on-device AI on it and renders the view with the AI overlay (tracked
+// people and objects, rule lines, status). Snapshots for alerts come from this view.
+// When paired with the hub, the view is also sent there so guard phones and the
+// laptop console can watch it (see shareFrames below).
 //
 // Compute budget ("coverage to compute"): a camera in WATCH runs the model only
 // when the picture changes; a camera covering an open alert switches to
@@ -46,7 +43,7 @@ export async function bindCamera(camId, device) {
   const cam = CAMERAS.find((c) => c.id === camId);
   const slot = {
     camId, cam, deviceId: device.id, label: device.label, stream, video,
-    raw: mk(W, H), out: mk(W, H), infer: mk(W, H), small: mk(64, 36), tiny: mk(W / 10, H / 10),
+    raw: mk(W, H), out: mk(W, H), infer: mk(W, H), small: mk(64, 36),
     analyzer: createAnalyzer(cam),
     faces: [], tracks: [], flagged: {}, prevSmall: null,
     stats: { fps: 0, people: 0, objects: 0, mode: 'WATCH', motion: 0, inferMs: 0, lastInfer: 0, events: 0, qr: null },
@@ -99,18 +96,6 @@ function frameStats(slot) {
   return { mean, std: Math.sqrt(v / n), sharp: lap / lapN, motion, thumb };
 }
 
-function pixelate(slot, ctx, x, y, w, h, block = 10) {
-  x = Math.max(0, x); y = Math.max(0, y); w = Math.min(W - x, w); h = Math.min(H - y, h);
-  if (w < 2 || h < 2) return;
-  const tw = Math.max(1, Math.round(w / block)); const th = Math.max(1, Math.round(h / block));
-  const t = slot.tiny.getContext('2d');
-  t.imageSmoothingEnabled = true;
-  t.drawImage(slot.raw, x, y, w, h, 0, 0, tw, th);
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(slot.tiny, 0, 0, tw, th, x, y, w, h);
-  ctx.imageSmoothingEnabled = true;
-}
-
 function behaviour(tr) {
   if (tr.label !== 'person') return tr.label;
   const v = speed(tr, 0.8);
@@ -120,24 +105,13 @@ function behaviour(tr) {
 function render(slot, t) {
   const ctx = slot.out.getContext('2d');
   ctx.drawImage(slot.raw, 0, 0, W, H);
-  const ready = vision.status === 'ready' && slot.stats.lastInfer;
-  if (!ready) {
-    pixelate(slot, ctx, 0, 0, W, H, 18);
-  } else {
-    for (const f of slot.faces) { const pad = 0.25; pixelate(slot, ctx, (f[0] - f[2] * pad) * W, (f[1] - f[3] * pad) * H, f[2] * (1 + 2 * pad) * W, f[3] * (1 + 2 * pad) * H, 9); }
-    for (const tr of slot.tracks) {
-      if (tr.label !== 'person') continue;
-      const [x, y, w, h] = tr.box;
-      pixelate(slot, ctx, (x + w * 0.15) * W, y * H, w * 0.7 * W, h * 0.24 * H, 9);
-    }
-  }
   const line = slot.analyzer.cfg.line;
   const E = slot.analyzer.cfg.enabled;
   if (line && (E.intrusion || E.tailgate || E.asset)) {
     ctx.save(); ctx.setLineDash([10, 8]); ctx.strokeStyle = 'rgba(245,158,11,.9)'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.moveTo(line[0] * W, line[1] * H); ctx.lineTo(line[2] * W, line[3] * H); ctx.stroke(); ctx.restore();
   }
-  ctx.font = '600 13px "JetBrains Mono Variable", monospace';
+  ctx.font = '600 13px "IBM Plex Mono", monospace';
   for (const tr of slot.tracks) {
     if (tr.hits < 2) continue;
     const [x, y, w, h] = tr.box;
@@ -154,7 +128,7 @@ function render(slot, t) {
   ctx.fillStyle = 'rgba(5,9,13,.7)'; ctx.fillRect(0, H - 24, W, 24);
   ctx.fillStyle = slot.stats.mode === 'INVESTIGATE' ? '#F43F5E' : '#00e5ff';
   const st = slot.stats;
-  const aiTxt = vision.status === 'ready' ? `${st.people} people · ${st.inferMs} ms` : vision.status === 'error' ? 'AI unavailable' : 'AI loading, view pixelated';
+  const aiTxt = vision.status === 'ready' ? `${st.people} people · ${st.inferMs} ms` : vision.status === 'error' ? 'AI unavailable' : 'AI loading';
   ctx.fillText(`${st.mode} · ${st.fps} fps · ${aiTxt}`, 8, H - 8);
 }
 
@@ -232,7 +206,7 @@ function loop(slot) {
 
 export const liveCount = () => Object.keys(live).length;
 
-// Anonymised frame from any connected camera at a checkpoint (for Saathi Walk
+// A frame from any connected camera at a checkpoint (for Saathi Walk
 // check-ins). Returns null when no real camera is connected there.
 export function snapshotAt(cp) {
   const s = Object.values(live).find((x) => x.cam.cp === cp && x.stats.lastInfer);
@@ -243,3 +217,31 @@ export function snapshotAt(cp) {
 }
 export const liveAt = (cp) => Object.values(live).filter((x) => x.cam.cp === cp).map((x) => x.camId);
 export { center };
+
+// Send each connected camera's live view to the hub, so guard phones and the
+// console can watch it: about 6 frames a second while someone is watching that
+// camera, and one every 2 s otherwise (for the camera wall thumbnails).
+export function shareFrames({ url, key }) {
+  let stopped = false;
+  const q = key ? `&key=${encodeURIComponent(key)}` : '';
+  const send = (slot) => {
+    slot.sharing = true;
+    slot.out.toBlob(async (blob) => {
+      let next = 2000;
+      try {
+        if (blob && !stopped) {
+          const r = await fetch(`${url}/api/frame?cam=${encodeURIComponent(slot.camId)}${q}`, { method: 'POST', body: blob, headers: { 'content-type': 'image/jpeg' }, cache: 'no-store' });
+          const j = await r.json().catch(() => ({}));
+          if (j.watchers > 0) next = 160;
+        }
+      } catch (e) { next = 4000; /* hub unreachable: try again later */ }
+      slot.shareNext = performance.now() + next;
+      slot.sharing = false;
+    }, 'image/jpeg', 0.6);
+  };
+  const timer = setInterval(() => {
+    const now = performance.now();
+    for (const slot of Object.values(live)) if (!slot.sharing && now >= (slot.shareNext || 0) && slot.frames + slot.stats.fps > 0) send(slot);
+  }, 80);
+  return () => { stopped = true; clearInterval(timer); };
+}

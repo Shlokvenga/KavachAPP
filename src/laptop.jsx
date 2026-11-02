@@ -201,7 +201,7 @@ function CamerasPage({ openCam }) {
       <div className="space-y-4">
         <Card>
           <div className="flex items-center gap-2"><Icon name="laptop" className="h-5 w-5 text-brand" /><h3 className="font-bold text-slate-900">Cameras on this laptop</h3></div>
-          <p className="mt-1 text-sm text-slate-600">Plug in USB webcams (or use the built-in one) and assign each to a campus camera. The AI runs here; only alerts and anonymised snapshots are shared with guard phones.</p>
+          <p className="mt-1 text-sm text-slate-600">Plug in USB webcams (or use the built-in one) and assign each to a campus camera. The AI runs here, and guard phones paired with this hub can watch the live view.</p>
           <div className="mt-3 grid grid-cols-2 gap-2 text-center">
             <div className="rounded-xl bg-raise py-2"><div className="text-xl font-extrabold text-brand">{here}</div><div className="text-[11px] text-slate-500">on this laptop</div></div>
             <div className="rounded-xl bg-raise py-2"><div className="text-xl font-extrabold text-slate-900">{remote}</div><div className="text-[11px] text-slate-500">on paired phones</div></div>
@@ -272,7 +272,7 @@ function AlertRow({ a, now, open, onToggle, openCam }) {
           {a.ai && <AiExplain a={a} />}
           {(a.snap || (a.photo && (a.photo.snap || a.photo.cam))) && (
             <div className="grid grid-cols-2 gap-2">
-              {a.snap && <img src={a.snap} alt="Anonymised alert frame" className="w-full rounded-xl ring-1 ring-line" />}
+              {a.snap && <img src={a.snap} alt="Alert frame" className="w-full rounded-xl ring-1 ring-line" />}
               {a.photo && <CheckpointPhoto snap={a.photo.snap} cam={a.photo.cam} time={a.photo.time} />}
             </div>
           )}

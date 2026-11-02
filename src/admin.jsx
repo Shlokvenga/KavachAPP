@@ -92,7 +92,7 @@ export function CctvHealth({ openCam, go }) {
       )}
       {s.darkSpots.length > 0 && <p className="mt-2 text-xs text-slate-500">Latest student report: dark spot near {CP[s.darkSpots[0].cp].name}, {fmtTime(s.darkSpots[0].time)}.</p>}
       {counts.online === 0 && <p className="mt-2 text-xs text-slate-500">No cameras connected yet. <button type="button" className="font-semibold text-brand underline" onClick={() => go('cams')}>Connect webcams</button> on this laptop, or a phone camera in Guard → Cameras.</p>}
-      <p className="mt-2 text-[11px] text-slate-400">Faces pixelated on device, no face search. Every view is in the audit log.</p>
+      <p className="mt-2 text-[11px] text-slate-400">No face search. Every camera view is in the audit log.</p>
     </Card>
   );
 }
@@ -428,9 +428,9 @@ export function Audit() {
     <div className="space-y-4 p-4 pb-8">
       <div className="rounded-3xl bg-gradient-to-br from-brand/15 to-[#060c11] ring-1 ring-brand/25 p-5 text-white shadow-md">
         <div className="text-xs font-bold uppercase tracking-wider text-accent">Transparency report</div>
-        <p className="mt-2 text-lg font-bold leading-snug">{m.walks} walk{m.walks === 1 ? '' : 's'}, {m.followers} follower alert{m.followers === 1 ? '' : 's'}, {m.faceSearches} face searches, {m.unblurs} unblur request{m.unblurs === 1 ? '' : 's'} sent to the student committee.</p>
+        <p className="mt-2 text-lg font-bold leading-snug">{m.walks} walk{m.walks === 1 ? '' : 's'}, {m.followers} follower alert{m.followers === 1 ? '' : 's'}, {m.faceSearches} face searches, {m.views} logged camera view{m.views === 1 ? '' : 's'}.</p>
         <div className="mt-4 grid grid-cols-4 gap-2 text-center">
-          {[[m.walks, 'Walks'], [m.followers, 'Follower alerts'], [m.faceSearches, 'Face searches'], [m.unblurs, 'Unblurs']].map(([v, k]) => (
+          {[[m.walks, 'Walks'], [m.followers, 'Follower alerts'], [m.faceSearches, 'Face searches'], [m.views, 'Camera views']].map(([v, k]) => (
             <div key={k} className="rounded-xl bg-white/10 px-1 py-2"><div className="text-xl font-extrabold">{v}</div><div className="text-[10px] leading-tight text-white/80">{k}</div></div>
           ))}
         </div>
@@ -444,7 +444,7 @@ export function Audit() {
           ))}
         </div>
         <Card className="divide-y divide-slate-100 p-0">
-          {list.length === 0 && <p className="p-4 text-center text-sm text-slate-500">Nothing logged yet. Every camera view, snapshot, unblur request and lookup appears here.</p>}
+          {list.length === 0 && <p className="p-4 text-center text-sm text-slate-500">Nothing logged yet. Every camera view, snapshot and lookup appears here.</p>}
           {list.map((a) => (
             <div key={a.id} className="fade-up flex gap-3 px-4 py-3">
               <span className={cls('mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg', a.cat === 'footage' ? 'bg-red-50 text-red-600' : a.cat === 'system' ? 'bg-slate-100 text-slate-600' : 'bg-brand-50 text-brand')}>

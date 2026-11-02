@@ -88,7 +88,7 @@ function staticScene(scene) {
   const labels = scene.primitives.add(new LabelCollection());
   for (const b of BUILDINGS) {
     labels.add({
-      position: pos(b.x, b.y, b.h + 6), text: b.short, font: '600 13px "Space Grotesk Variable", system-ui, sans-serif',
+      position: pos(b.x, b.y, b.h + 6), text: b.short, font: '600 13px "Sora Variable", system-ui, sans-serif',
       fillColor: C('#d6e2e6'), outlineColor: C('#05090d'), outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE,
       verticalOrigin: VerticalOrigin.BOTTOM, horizontalOrigin: HorizontalOrigin.CENTER,
       scaleByDistance: new NearFarScalar(200, 1.1, 2500, 0.5), disableDepthTestDistance: Number.POSITIVE_INFINITY, id: 'bld:' + b.id,
@@ -98,7 +98,7 @@ function staticScene(scene) {
   for (const [id, cp] of Object.entries(CHECKPOINTS)) {
     pts.add({ position: pos(cp.x, cp.y, 1.5), pixelSize: 15, color: C('#060c11'), outlineColor: C('#00e5ff'), outlineWidth: 3, id: 'cp:' + id, disableDepthTestDistance: Number.POSITIVE_INFINITY });
     labels.add({
-      position: pos(cp.x, cp.y, 1.5), text: cp.tag, font: '800 11px "Space Grotesk Variable", system-ui, sans-serif', fillColor: C('#00e5ff'),
+      position: pos(cp.x, cp.y, 1.5), text: cp.tag, font: '800 11px "Sora Variable", system-ui, sans-serif', fillColor: C('#00e5ff'),
       horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.CENTER, disableDepthTestDistance: Number.POSITIVE_INFINITY, id: 'cp:' + id,
     });
   }
@@ -170,7 +170,7 @@ function create(container, { onPick } = {}) {
         lines.add({ positions: [pos(cam.x, cam.y, 0), pos(cam.x, cam.y, 7)], width: 2, material: Material.fromType('Color', { color: C('#4b6370') }) });
         pts.add({ position: pos(cam.x, cam.y, 7), pixelSize: sel ? 14 : 10, color: C(CAM_COLOR[st]), outlineColor: C('#ffffff'), outlineWidth: 2, id: 'cam:' + cam.id, scaleByDistance: new NearFarScalar(250, 1, 2200, 0.5), disableDepthTestDistance: Number.POSITIVE_INFINITY });
         if (L.labels !== false) {
-          labels.add({ position: pos(cam.x, cam.y, 7), text: cam.id, font: '600 10px "Space Grotesk Variable", system-ui, sans-serif', fillColor: C('#ffffff'), outlineColor: C('#05090d'), outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cartesian2(0, -14), horizontalOrigin: HorizontalOrigin.CENTER, scaleByDistance: new NearFarScalar(150, 1, 1200, 0.5), disableDepthTestDistance: Number.POSITIVE_INFINITY, id: 'cam:' + cam.id });
+          labels.add({ position: pos(cam.x, cam.y, 7), text: cam.id, font: '600 10px "Sora Variable", system-ui, sans-serif', fillColor: C('#ffffff'), outlineColor: C('#05090d'), outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cartesian2(0, -14), horizontalOrigin: HorizontalOrigin.CENTER, scaleByDistance: new NearFarScalar(150, 1, 1200, 0.5), disableDepthTestDistance: Number.POSITIVE_INFINITY, id: 'cam:' + cam.id });
         }
       }
       dyn.add(new Primitive({ geometryInstances: inst, appearance: new PerInstanceColorAppearance({ flat: true, translucent: true }), asynchronous: false }));
@@ -188,7 +188,7 @@ function create(container, { onPick } = {}) {
           modelMatrix: Transforms.eastNorthUpToFixedFrame(pos(p.x, p.y, h / 2)),
           attributes: { color: ColorGeometryInstanceAttribute.fromColor(Color.lerp(C('#f59e0b'), C('#F43F5E'), n / max, new Color()).withAlpha(0.8)) },
         }));
-        labels.add({ position: pos(p.x, p.y, h + 4), text: String(n), font: '800 14px "Space Grotesk Variable", system-ui, sans-serif', fillColor: C('#ffffff'), outlineColor: C('#4c0519'), outlineWidth: 4, style: LabelStyle.FILL_AND_OUTLINE, horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.BOTTOM, disableDepthTestDistance: Number.POSITIVE_INFINITY });
+        labels.add({ position: pos(p.x, p.y, h + 4), text: String(n), font: '800 14px "Sora Variable", system-ui, sans-serif', fillColor: C('#ffffff'), outlineColor: C('#4c0519'), outlineWidth: 4, style: LabelStyle.FILL_AND_OUTLINE, horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.BOTTOM, disableDepthTestDistance: Number.POSITIVE_INFINITY });
       }
       if (inst.length) dyn.add(new Primitive({ geometryInstances: inst, appearance: new PerInstanceColorAppearance({ closed: true, translucent: true }), asynchronous: false }));
     }
@@ -201,14 +201,14 @@ function create(container, { onPick } = {}) {
         const p = pts.add({ position: pos(at.x, at.y, 3), pixelSize: 18, color: C('#10B981', 0.6), disableDepthTestDistance: Number.POSITIVE_INFINITY });
         pulses.push(p);
         pts.add({ position: pos(at.x, at.y, 3), pixelSize: 12, color: C('#10B981'), outlineColor: C('#ffffff'), outlineWidth: 2, id: 'walk', disableDepthTestDistance: Number.POSITIVE_INFINITY });
-        labels.add({ position: pos(at.x, at.y, 3), text: 'Saathi Walk', font: '700 11px "Space Grotesk Variable", system-ui, sans-serif', fillColor: C('#10B981'), outlineColor: C('#05090d'), outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cartesian2(0, -16), horizontalOrigin: HorizontalOrigin.CENTER, disableDepthTestDistance: Number.POSITIVE_INFINITY });
+        labels.add({ position: pos(at.x, at.y, 3), text: 'Saathi Walk', font: '700 11px "Sora Variable", system-ui, sans-serif', fillColor: C('#10B981'), outlineColor: C('#05090d'), outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cartesian2(0, -16), horizontalOrigin: HorizontalOrigin.CENTER, disableDepthTestDistance: Number.POSITIVE_INFINITY });
       }
     }
 
     if (L.guards !== false) {
       for (const g of d.guards || []) {
         pts.add({ position: pos(g.x, g.y, 2), pixelSize: 13, color: C('#38bdf8'), outlineColor: C('#ffffff'), outlineWidth: 2, id: 'guard:' + g.id, disableDepthTestDistance: Number.POSITIVE_INFINITY });
-        labels.add({ position: pos(g.x, g.y, 2), text: g.name, font: '700 11px "Space Grotesk Variable", system-ui, sans-serif', fillColor: C('#dbeafe'), outlineColor: C('#05090d'), outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cartesian2(0, 16), horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.TOP, disableDepthTestDistance: Number.POSITIVE_INFINITY });
+        labels.add({ position: pos(g.x, g.y, 2), text: g.name, font: '700 11px "Sora Variable", system-ui, sans-serif', fillColor: C('#dbeafe'), outlineColor: C('#05090d'), outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cartesian2(0, 16), horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.TOP, disableDepthTestDistance: Number.POSITIVE_INFINITY });
       }
     }
 
@@ -222,7 +222,7 @@ function create(container, { onPick } = {}) {
         lines.add({ positions: [pos(x, y, 0), pos(x, y, 90)], width: 10, material: Material.fromType('PolylineGlow', { color: C(col, 0.9), glowPower: 0.25 }) });
         pulses.push(pts.add({ position: pos(x, y, 3), pixelSize: 20, color: C(col, 0.6), disableDepthTestDistance: Number.POSITIVE_INFINITY }));
         pts.add({ position: pos(x, y, 3), pixelSize: d.selected === 'alert:' + a.id ? 16 : 12, color: C(col), outlineColor: C('#ffffff'), outlineWidth: 2, id: 'alert:' + a.id, disableDepthTestDistance: Number.POSITIVE_INFINITY });
-        if (L.labels !== false) labels.add({ position: pos(x, y, 92), text: a.label, font: '700 12px "Space Grotesk Variable", system-ui, sans-serif', fillColor: C('#ffffff'), outlineColor: C('#7f1d1d'), outlineWidth: 4, style: LabelStyle.FILL_AND_OUTLINE, horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.BOTTOM, scaleByDistance: new NearFarScalar(200, 1, 1500, 0.6), disableDepthTestDistance: Number.POSITIVE_INFINITY, id: 'alert:' + a.id });
+        if (L.labels !== false) labels.add({ position: pos(x, y, 92), text: a.label, font: '700 12px "Sora Variable", system-ui, sans-serif', fillColor: C('#ffffff'), outlineColor: C('#7f1d1d'), outlineWidth: 4, style: LabelStyle.FILL_AND_OUTLINE, horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.BOTTOM, scaleByDistance: new NearFarScalar(200, 1, 1500, 0.6), disableDepthTestDistance: Number.POSITIVE_INFINITY, id: 'alert:' + a.id });
       }
     }
     dyn.add(lines); dyn.add(pts); dyn.add(labels);
